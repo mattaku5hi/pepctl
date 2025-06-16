@@ -1,0 +1,72 @@
+[
+  {
+    "id": "allow_loopback_ping",
+    "action": "ALLOW",
+    "src": {
+      "ip": "127.0.0.1",
+      "port": 0,
+      "protocol": "ICMP"
+    },
+    "dst": {
+      "ip": "127.0.0.1",
+      "port": 0,
+      "protocol": "ICMP"
+    }
+  },
+  {
+    "id": "log_loopback_http",
+    "action": "LOG_ONLY",
+    "src": {
+      "ip": "127.0.0.1",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "127.0.0.1",
+      "port": 80,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_loopback_ssh",
+    "action": "ALLOW",
+    "src": {
+      "ip": "127.0.0.1",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "127.0.0.1",
+      "port": 22,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_loopback_pepctl_admin",
+    "action": "ALLOW",
+    "src": {
+      "ip": "127.0.0.1",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "127.0.0.1",
+      "port": 8080,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_loopback_pepctl_metrics",
+    "action": "ALLOW",
+    "src": {
+      "ip": "127.0.0.1",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "127.0.0.1",
+      "port": 9090,
+      "protocol": "TCP"
+    }
+  }
+] 

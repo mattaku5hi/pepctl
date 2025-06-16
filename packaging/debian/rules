@@ -1,0 +1,114 @@
+#!/usr/bin/make -f
+
+# Debian rules file for pepctl
+# This file controls the build process
+
+# Enable all hardening options
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+# Enable verbose build output
+export DH_VERBOSE = 1
+
+# Get version from CMake project
+PEPCTL_VERSION := $(shell grep "project.*VERSION" CMakeLists.txt | sed -n 's/.*VERSION \([0-9.]*\).*/\1/p')
+DEB_VERSION := $(shell dpkg-parsechangelog -S Version)
+
+# CMake build options
+CMAKE_OPTIONS = \
+	-DCMAKE_BUILD_TYPE=Release \
+	-DENABLE_TESTS=OFF \
+	-DENABLE_COVERAGE=OFF \
+	-DCMAKE_INSTALL_PREFIX=/usr \
+	-DCMAKE_INSTALL_SYSCONFDIR=/etc \
+	-DCMAKE_INSTALL_LOCALSTATEDIR=/var \
+	-DPEPCTL_VERSION=$(PEPCTL_VERSION)
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	@echo "Building PEPCTL version: $(PEPCTL_VERSION)"
+	@echo "Debian package version: $(DEB_VERSION)"
+	dh_auto_configure -- $(CMAKE_OPTIONS)
+
+override_dh_auto_build:
+	dh_auto_build
+	# Verify eBPF programs were built correctly
+	@echo "Verifying eBPF programs..."
+	@if [ -f obj-*/ebpf/packet_filter.o ]; then \
+		echo "eBPF programs built successfully"; \
+		file obj-*/ebpf/packet_filter.o; \
+	else \
+		echo "Error: eBPF programs not found"; \
+		exit 1; \
+	fi
+
+override_dh_auto_install:
+	dh_auto_install
+	
+	# Install configuration files
+	install -d debian/pepctl/usr/share/pepctl
+	install -m 644 configs/production.json debian/pepctl/usr/share/pepctl/
+	install -m 644 configs/development.json debian/pepctl/usr/share/pepctl/
+	install -m 644 configs/testing.json debian/pepctl/usr/share/pepctl/
+	
+	# Install eBPF object files
+	install -d debian/pepctl/usr/share/pepctl/ebpf
+	install -m 644 obj-*/ebpf/*.o debian/pepctl/usr/share/pepctl/ebpf/
+	
+	# Install systemd service file
+	install -d debian/pepctl/lib/systemd/system
+	install -m 644 systemd/pepctl.service debian/pepctl/lib/systemd/system/
+	
+	# Install documentation
+	install -d debian/pepctl/usr/share/doc/pepctl
+	install -m 644 README.md debian/pepctl/usr/share/doc/pepctl/
+	
+	# Install policy examples
+	install -d debian/pepctl/usr/share/pepctl/policies
+	install -m 644 policies/*.json debian/pepctl/usr/share/pepctl/policies/
+	
+	# Install version information
+	install -d debian/pepctl/usr/share/pepctl
+	echo "$(PEPCTL_VERSION)" > debian/pepctl/usr/share/pepctl/VERSION
+	echo "$(DEB_VERSION)" > debian/pepctl/usr/share/pepctl/DEB_VERSION
+	
+	# Install man page if it exists
+	if [ -f docs/pepctl.8 ]; then \
+		install -d debian/pepctl/usr/share/man/man8; \
+		install -m 644 docs/pepctl.8 debian/pepctl/usr/share/man/man8/; \
+	fi
+
+# Systemd integration is handled automatically by debhelper compat 13
+# Service enabling/starting is controlled by postinst/prerm scripts
+
+override_dh_installinit:
+	# We use systemd, not sysvinit
+	@echo "Skipping sysvinit installation - using systemd"
+
+# Maintainer scripts are handled automatically by debhelper
+
+# Clean up build artifacts
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf obj-*
+	rm -f debian/files
+	rm -f debian/debhelper-build-stamp
+	rm -f debian/*.substvars
+	rm -rf debian/pepctl/
+
+# Version management targets
+.PHONY: show-version update-changelog
+show-version:
+	@echo "CMake version: $(PEPCTL_VERSION)"
+	@echo "Debian version: $(DEB_VERSION)"
+
+update-changelog:
+	@echo "Current versions:"
+	@echo "  CMake: $(PEPCTL_VERSION)"
+	@echo "  Debian: $(DEB_VERSION)"
+	@echo "To update changelog, run: dch -v $(PEPCTL_VERSION)-1"
+
+.PHONY: override_dh_auto_configure override_dh_auto_build override_dh_auto_install \
+        override_dh_installinit override_dh_auto_clean \
+        show-version update-changelog 

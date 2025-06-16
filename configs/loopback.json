@@ -1,0 +1,26 @@
+{
+    "daemon": {
+        "mode": true
+    },
+    "log": {
+        "level": "debug",
+        "file": "/tmp/pepctl.log"
+    },
+    "server": {
+        "admin_port": 8080,
+        "metrics_port": 9090
+    },
+    "network": {
+        "interface": "lo"
+    },
+    "metrics": {
+        "enabled": true
+    },
+    "policy": {
+        "capacity": 1000,
+        "policies_file": "/home/mattakushi/Projects/work_selfstudy/otus_basic_hw/otus-cpp-basic_project/policies/loopback.json"
+    },
+    "ebpf": {
+        "program_path": "/home/mattakushi/Projects/work_selfstudy/otus_basic_hw/otus-cpp-basic_project/build/ebpf/packet_filter.o"
+    }
+} 

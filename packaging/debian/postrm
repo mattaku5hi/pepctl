@@ -1,0 +1,85 @@
+#!/bin/bash
+set -e
+
+# Post-removal script for pepctl
+# This script runs after the package is removed
+
+case "$1" in
+    remove)
+        # Clean up eBPF resources
+        echo "Cleaning up eBPF resources..."
+        
+        # Remove XDP programs from all interfaces
+        for iface in $(ip link show | grep -E '^[0-9]+:' | awk -F': ' '{print $2}' | sed 's/@.*//'); do
+            if ip link show "$iface" 2>/dev/null | grep -q "prog/xdp"; then
+                echo "Removing XDP program from interface $iface"
+                ip link set dev "$iface" xdp off 2>/dev/null || true
+            fi
+        done
+        
+        # Remove TC programs from all interfaces
+        for iface in $(ip link show | grep -E '^[0-9]+:' | awk -F': ' '{print $2}' | sed 's/@.*//'); do
+            if tc qdisc show dev "$iface" 2>/dev/null | grep -q clsact; then
+                echo "Removing TC qdisc from interface $iface"
+                tc qdisc del dev "$iface" clsact 2>/dev/null || true
+            fi
+        done
+        
+        # Remove pinned BPF maps
+        echo "Removing pinned BPF maps..."
+        rm -f /sys/fs/bpf/stats_map 2>/dev/null || true
+        rm -f /sys/fs/bpf/policy_map 2>/dev/null || true
+        rm -f /sys/fs/bpf/packet_events 2>/dev/null || true
+        rm -rf /sys/fs/bpf/xdp/ 2>/dev/null || true
+        rm -rf /sys/fs/bpf/tc/ 2>/dev/null || true
+        find /sys/fs/bpf/ -name "*pepctl*" -type f -delete 2>/dev/null || true
+        
+        # Remove runtime directories
+        rm -rf /run/pepctl 2>/dev/null || true
+        
+        echo "eBPF cleanup completed"
+        ;;
+        
+    purge)
+        # Complete removal including configuration and data
+        echo "Purging pepctl configuration and data..."
+        
+        # Remove configuration files and policies
+        rm -rf /etc/pepctl 2>/dev/null || true
+        rm -f /etc/default/pepctl 2>/dev/null || true
+        rm -f /etc/systemd/journald.conf.d/pepctl.conf 2>/dev/null || true
+        
+        # Remove runtime directories
+        rm -rf /run/pepctl 2>/dev/null || true
+        
+        # Remove user and group
+        if getent passwd pepctl >/dev/null; then
+            echo "Removing pepctl user..."
+            userdel pepctl 2>/dev/null || true
+        fi
+        
+        if getent group pepctl >/dev/null; then
+            echo "Removing pepctl group..."
+            groupdel pepctl 2>/dev/null || true
+        fi
+        
+        # Reload systemd daemon
+        systemctl daemon-reload || true
+        
+        # Restart journald to pick up config changes
+        systemctl restart systemd-journald || true
+        
+        echo "PEPCTL purge completed"
+        ;;
+        
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        # Nothing to do
+        ;;
+        
+    *)
+        echo "postrm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0 

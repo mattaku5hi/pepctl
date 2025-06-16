@@ -1,0 +1,43 @@
+[Unit]
+Description=PEPCTL - Policy Enforcement Point Control Utility
+Documentation=man:pepctl(8)
+After=network.target network-online.target
+Wants=network-online.target
+RequiresMountsFor=/sys/fs/bpf
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/pepctl --config /etc/pepctl/pepctl.conf
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=always
+RestartSec=5
+User=root
+Group=root
+
+# Security settings
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/pepctl /sys/fs/bpf
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN CAP_BPF CAP_PERFMON
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN CAP_BPF CAP_PERFMON
+
+# Resource limits
+LimitNOFILE=65536
+LimitMEMLOCK=infinity
+
+# Logging - systemd-journald only, no external log files
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pepctl
+
+# Environment
+Environment=PEPCTL_LOG_LEVEL=info
+EnvironmentFile=-/etc/default/pepctl
+
+[Install]
+WantedBy=multi-user.target 

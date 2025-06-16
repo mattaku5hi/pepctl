@@ -1,0 +1,26 @@
+{
+  "daemon": {
+    "mode": false
+  },
+  "log": {
+    "level": "info",
+    "file": "/tmp/pepctl_real_interface.log"
+  },
+  "server": {
+    "admin_port": 8080,
+    "metrics_port": 9090,
+    "bind_address": "192.168.3.66"
+  },
+  "network": {
+    "interface": "enx00e099002775"
+  },
+  "metrics": {
+    "enabled": true
+  },
+  "policy": {
+    "capacity": 1000
+  },
+  "ebpf": { 
+    "program_path": "/home/mattakushi/Projects/work_selfstudy/otus_basic_hw/otus-cpp-basic_project/build/ebpf/packet_filter.o"
+  }
+} 

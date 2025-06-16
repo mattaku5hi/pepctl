@@ -1,0 +1,22 @@
+{
+    "log": {
+        "level": "info"
+    },
+    "server": {
+        "admin_port": 8080,
+        "metrics_port": 9090
+    },
+    "network": {
+        "interface": "lo"
+    },
+    "metrics": {
+        "enabled": true
+    },
+    "policy": {
+        "capacity": 10000,
+        "policies_file": "/etc/pepctl/policies/production.json"
+    },
+    "ebpf": {
+        "program_path": "/usr/share/pepctl/ebpf/packet_filter.o"
+    }
+} 
