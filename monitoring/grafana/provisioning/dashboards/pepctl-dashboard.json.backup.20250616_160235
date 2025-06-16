@@ -3,12 +3,7 @@
     "id": null,
     "uid": "pepctl-dashboard",
     "title": "PEPCTL Network Policy Enforcement Dashboard",
-    "tags": [
-      "pepctl",
-      "network",
-      "security",
-      "ebpf"
-    ],
+    "tags": ["pepctl", "network", "security", "ebpf"],
     "style": "dark",
     "timezone": "browser",
     "panels": [
@@ -29,21 +24,13 @@
             },
             "thresholds": {
               "steps": [
-                {
-                  "color": "green",
-                  "value": null
-                }
+                {"color": "green", "value": null}
               ]
             },
             "unit": "s"
           }
         },
-        "gridPos": {
-          "h": 8,
-          "w": 6,
-          "x": 0,
-          "y": 0
-        }
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
       },
       {
         "id": 2,
@@ -62,20 +49,12 @@
             },
             "thresholds": {
               "steps": [
-                {
-                  "color": "blue",
-                  "value": null
-                }
+                {"color": "blue", "value": null}
               ]
             }
           }
         },
-        "gridPos": {
-          "h": 8,
-          "w": 6,
-          "x": 6,
-          "y": 0
-        }
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
       },
       {
         "id": 3,
@@ -93,12 +72,7 @@
             "min": 0
           }
         ],
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 12,
-          "y": 0
-        }
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
       },
       {
         "id": 4,
@@ -147,7 +121,7 @@
                   "id": "color",
                   "value": {
                     "mode": "fixed",
-                    "fixedColor": "#3498db"
+                    "fixedColor": "#1f77b4"
                   }
                 }
               ]
@@ -162,7 +136,7 @@
                   "id": "color",
                   "value": {
                     "mode": "fixed",
-                    "fixedColor": "#27ae60"
+                    "fixedColor": "#2ca02c"
                   }
                 }
               ]
@@ -177,7 +151,7 @@
                   "id": "color",
                   "value": {
                     "mode": "fixed",
-                    "fixedColor": "#e74c3c"
+                    "fixedColor": "#d62728"
                   }
                 }
               ]
@@ -192,7 +166,7 @@
                   "id": "color",
                   "value": {
                     "mode": "fixed",
-                    "fixedColor": "#f39c12"
+                    "fixedColor": "#ff7f0e"
                   }
                 }
               ]
@@ -207,7 +181,7 @@
                   "id": "color",
                   "value": {
                     "mode": "fixed",
-                    "fixedColor": "#8e44ad"
+                    "fixedColor": "#9467bd"
                   }
                 }
               ]
@@ -220,12 +194,7 @@
             "min": 0
           }
         ],
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 0,
-          "y": 8
-        }
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
       },
       {
         "id": 5,
@@ -243,12 +212,7 @@
             "min": 0
           }
         ],
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 12,
-          "y": 8
-        }
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
       },
       {
         "id": 6,
@@ -266,12 +230,7 @@
             "min": 0
           }
         ],
-        "gridPos": {
-          "h": 8,
-          "w": 24,
-          "x": 0,
-          "y": 16
-        }
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
       }
     ],
     "time": {
@@ -280,4 +239,4 @@
     },
     "refresh": "5s"
   }
-}
+} 

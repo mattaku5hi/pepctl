@@ -1,0 +1,86 @@
+[
+  {
+    "id": "allow_ssh_dev",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 22,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "log_http_dev",
+    "action": "LOG_ONLY",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 80,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "log_https_dev",
+    "action": "LOG_ONLY",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 443,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_pepctl_admin_dev",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 8080,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_pepctl_metrics_dev",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 9090,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "log_all_icmp_dev",
+    "action": "LOG_ONLY",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "ICMP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 0,
+      "protocol": "ICMP"
+    }
+  }
+] 

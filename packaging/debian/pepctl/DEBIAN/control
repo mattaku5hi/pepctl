@@ -1,0 +1,26 @@
+Package: pepctl
+Version: 1.0.0-1
+Architecture: amd64
+Maintainer: PEPCTL Development Team <dev@pepctl.org>
+Installed-Size: 2875
+Depends: libboost-program-options1.83.0 (>= 1.83.0), libbpf1 (>= 1:0.7.0), libc6 (>= 2.38), libfmt9 (>= 9.1.0+ds1), libgcc-s1 (>= 3.3.1), libstdc++6 (>= 13.1), libsystemd0, libelf1, libboost-system1.83.0, libboost-filesystem1.83.0, libboost-thread1.83.0, libspdlog1.12, systemd
+Recommends: linux-tools-generic, bpftool
+Suggests: wireshark, tcpdump, netcat-openbsd
+Section: net
+Priority: optional
+Homepage: https://github.com/pepctl/pepctl
+Description: Policy Enforcement Point Control Utility
+ PEPCTL is a high-performance Policy Enforcement Point (PEP) daemon built in
+ modern C++ that provides real-time network packet filtering and policy
+ enforcement using eBPF technology.
+ .
+ Key features:
+  * eBPF-based packet processing for high performance
+  * Dynamic policy management with runtime updates
+  * Lock-free architecture optimized for multi-threading
+  * Real-time metrics with Prometheus integration
+  * Comprehensive logging with systemd journal integration
+  * Modern C++20 implementation with best practices
+ .
+ This package includes the main daemon, configuration files, systemd service
+ integration, and comprehensive documentation.

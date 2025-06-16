@@ -1,0 +1,114 @@
+[
+  {
+    "id": "allow_ssh_inbound",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 22,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_http_inbound",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 80,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_https_inbound",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 443,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_pepctl_admin",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 8080,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_pepctl_metrics",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 9090,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "log_dns_queries",
+    "action": "LOG_ONLY",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "UDP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 53,
+      "protocol": "UDP"
+    }
+  },
+  {
+    "id": "block_telnet_inbound",
+    "action": "BLOCK",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 23,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "rate_limit_ftp_inbound",
+    "action": "RATE_LIMIT",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "192.168.3.66",
+      "port": 21,
+      "protocol": "TCP"
+    }
+  }
+] 

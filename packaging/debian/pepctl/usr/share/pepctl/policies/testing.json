@@ -1,0 +1,86 @@
+[
+  {
+    "id": "allow_ssh_test",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 22,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "block_telnet_test",
+    "action": "BLOCK",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 23,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "log_http_test",
+    "action": "LOG_ONLY",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 80,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "rate_limit_https_test",
+    "action": "RATE_LIMIT",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 443,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_pepctl_admin_test",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 8080,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_pepctl_metrics_test",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 9090,
+      "protocol": "TCP"
+    }
+  }
+] 

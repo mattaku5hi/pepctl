@@ -1261,6 +1261,11 @@ void MetricsServer::registerDefaultMetrics()
         "pepctl_ebpf_packets_processed_total", MetricType::COUNTER, "Total eBPF packets processed");
 }
 
+/*
+    CORS (Cross-Origin Resource Sharing) is a web security mechanism that allows web
+    pages from one domain to access resources from another domain safely.
+    It is used to allow the dashboard to access the metrics server.
+*/
 void MetricsServer::addCorsHeaders(http::response<http::string_body>& res) const
 {
     if(m_corsEnabled == true)

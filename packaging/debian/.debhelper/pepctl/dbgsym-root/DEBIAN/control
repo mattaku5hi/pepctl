@@ -1,0 +1,13 @@
+Package: pepctl-dbgsym
+Package-Type: ddeb
+Source: pepctl
+Version: 1.0.0-1
+Auto-Built-Package: debug-symbols
+Architecture: amd64
+Maintainer: PEPCTL Development Team <dev@pepctl.org>
+Installed-Size: 11221
+Depends: pepctl (= 1.0.0-1)
+Section: debug
+Priority: optional
+Description: debug symbols for pepctl
+Build-Ids: 072c2c5630c354c3ac496f2d022da8d4e5d54575 2593e4955889d75eb06fa6dc9a806ac99d92a84e 48a3fe78544e383e7b49a02c40409caba968598c 55756b3d9f86744df68bb11f0eed83034023d5ca 7babbbf38a53f95e81823c68279163997ae05f54 e0dd4064b7cfe1fa6c6b98a64d5e54827fc6cb5a f80b11c9829db7cef50d8e769a73134accd71ec4
