@@ -1,0 +1,50 @@
+# PEPCTL clang-tidy configuration
+# For semantic code analysis and style enforcement beyond formatting
+# 
+# Note: For pointer comparisons:
+# - C files (.c): Use NULL (if(ptr != NULL))
+# - C++ files (.cpp, .hpp): Use nullptr (if(ptr != nullptr))
+
+Checks: >
+  readability-implicit-bool-conversion,
+  readability-*,
+  performance-*,
+  cppcoreguidelines-*,
+  clang-analyzer-cplusplus.InnerPointer,
+  readability-container-data-pointer,
+  readability-delete-null-pointer,
+  cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  readability-identifier-naming,
+  -readability-magic-numbers,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -readability-redundant-member-init,
+  -cppcoreguidelines-use-default-member-init
+
+WarningsAsErrors: 'readability-implicit-bool-conversion'
+
+CheckOptions:
+  - key: readability-implicit-bool-conversion.AllowPointerConditions
+    value: false
+  - key: readability-implicit-bool-conversion.AllowIntegerConditions  
+    value: false
+  - key: readability-implicit-bool-conversion.AllowConditionalPointerCasts
+    value: false
+  - key: cppcoreguidelines-pro-bounds-pointer-arithmetic.IndexCheck
+    value: true
+  # Naming conventions
+  - key: readability-identifier-naming.MemberVariableCase
+    value: camelBack
+  - key: readability-identifier-naming.MemberVariablePrefix
+    value: m_
+  - key: readability-identifier-naming.PrivateMemberVariableCase
+    value: camelBack
+  - key: readability-identifier-naming.PrivateMemberVariablePrefix
+    value: m_
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.VariableCase
+    value: camelBack 
