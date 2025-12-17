@@ -3,18 +3,25 @@
  * Uses vmlinux.h (BTF-generated) + libbpf helpers
  */
 
-/* 
+/*
     It must go first
 */
-#include "vmlinux.h"
-
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 
+#include "vmlinux.h"
 
 // Only define constants that are missing from vmlinux.h
 #ifndef ETH_P_IP
 #define ETH_P_IP 0x0800  // IPv4 Ethernet frame type
+#endif
+
+#ifndef ETH_P_8021Q
+#define ETH_P_8021Q 0x8100
+#endif
+
+#ifndef ETH_P_8021AD
+#define ETH_P_8021AD 0x88A8
 #endif
 
 #ifndef ETH_HLEN
@@ -117,13 +124,31 @@ static __always_inline int parse_packet_xdp(struct xdp_md* ctx, struct policy_ke
         return -1;
 
     // Only handle IPv4 packets
-    if(bpf_ntohs(eth->h_proto) != ETH_P_IP)
+    __u16 h_proto = bpf_ntohs(eth->h_proto);
+    __u64 l3_offset = sizeof(*eth);
+    if(h_proto == ETH_P_8021Q || h_proto == ETH_P_8021AD)
+    {
+        void* vlan = (void*)((char*)data + l3_offset);
+        if((void*)((char*)vlan + 4) > data_end)
+        {
+            return -1;
+        }
+        h_proto = bpf_ntohs(*(__be16*)((char*)vlan + 2));
+        l3_offset += 4;
+    }
+    if(h_proto != ETH_P_IP)
         return -1;
 
     // Parse IP header using standard struct iphdr
-    struct iphdr* ip = (void*)(eth + 1);
+    struct iphdr* ip = (void*)((char*)data + l3_offset);
     if((void*)(ip + 1) > data_end)
+    {
         return -1;
+    }
+    if(ip->ihl < 5)
+    {
+        return -1;
+    }
 
     // Extract IP information
     key->src_ip = ip->saddr;
@@ -138,7 +163,13 @@ static __always_inline int parse_packet_xdp(struct xdp_md* ctx, struct policy_ke
     key->pad[2] = 0;
 
     // Extract port information for TCP/UDP using standard headers
-    void* l4_hdr = (void*)ip + (ip->ihl * 4);
+    __u16 frag_off = bpf_ntohs(ip->frag_off);
+    if((frag_off & 0x1FFF) != 0 || (frag_off & 0x2000) != 0)
+        return 0;
+
+    void* l4_hdr = (void*)((char*)ip + (ip->ihl * 4));
+    if(l4_hdr > data_end)
+        return 0;
 
     if(ip->protocol == IPPROTO_TCP)
     {
@@ -317,13 +348,29 @@ static __always_inline int parse_packet_tc(struct __sk_buff* skb, struct policy_
         return -1;
 
     // Only handle IPv4 packets
-    if(bpf_ntohs(eth->h_proto) != ETH_P_IP)
+    __u16 h_proto = bpf_ntohs(eth->h_proto);
+    __u64 l3_offset = sizeof(*eth);
+    if(h_proto == ETH_P_8021Q || h_proto == ETH_P_8021AD)
+    {
+        void* vlan = (void*)((char*)data + l3_offset);
+        if((void*)((char*)vlan + 4) > data_end)
+            return -1;
+        h_proto = bpf_ntohs(*(__be16*)((char*)vlan + 2));
+        l3_offset += 4;
+    }
+    if(h_proto != ETH_P_IP)
         return -1;
 
     // Parse IP header using standard struct iphdr
-    struct iphdr* ip = (void*)(eth + 1);
+    struct iphdr* ip = (void*)((char*)data + l3_offset);
     if((void*)(ip + 1) > data_end)
+    {
         return -1;
+    }
+    if(ip->ihl < 5)
+    {
+        return -1;
+    }
 
     // Extract IP information
     key->src_ip = ip->saddr;
@@ -344,7 +391,9 @@ static __always_inline int parse_packet_tc(struct __sk_buff* skb, struct policy_
     {
         struct tcphdr* tcp = l4_hdr;
         if((void*)(tcp + 1) > data_end)
-            return 0;  // Continue without ports
+        {
+            return 0; // Continue without ports
+        }
         key->src_port = tcp->source;
         key->dst_port = tcp->dest;
     }
@@ -352,7 +401,9 @@ static __always_inline int parse_packet_tc(struct __sk_buff* skb, struct policy_
     {
         struct udphdr* udp = l4_hdr;
         if((void*)(udp + 1) > data_end)
+        {
             return 0;  // Continue without ports
+        }
         key->src_port = udp->source;
         key->dst_port = udp->dest;
     }
