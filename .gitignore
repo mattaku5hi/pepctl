@@ -1,11 +1,13 @@
 # Build directories
-build/
-dist/
-obj-*/
-release/
-debug/
-build-release/
-build-debug/
+**/build/
+**/dist/
+**/out/
+**/obj-*/
+**/release/
+**/debug/
+**/build-release/
+**/build-debug/
+**/build-*/
 
 # CMake
 CMakeFiles/
@@ -30,9 +32,13 @@ Makefile
 *.dylib
 *.dll
 
-# Fortran module files
-*.mod
-*.smod
+# Python files
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+**/venv/
 
 # Compiled Static libraries
 *.lai
@@ -51,12 +57,19 @@ Makefile
 *.idb
 *.pdb
 
-# Generated files
-compile_commands.json
-
 # IDE files
 .vscode/
 .idea/
+*.tags
+compile_commands.json
+
+# Project-specific files
+*.settings
+*.png
+*.bin
+*.pbm
+*.rbit
+*.log
 *.swp
 *.swo
 *~
@@ -80,10 +93,6 @@ Thumbs.db
 *.rpm
 *.tar.gz
 *.zip
-
-# Core dumps
-core
-core.*
 
 # Coverage files
 *.gcov
