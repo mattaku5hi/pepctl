@@ -16,6 +16,10 @@
 #define ETH_P_IP 0x0800  // IPv4 Ethernet frame type
 #endif
 
+#ifndef ETH_P_IPV6
+#define ETH_P_IPV6 0x86DD
+#endif
+
 #ifndef ETH_P_8021Q
 #define ETH_P_8021Q 0x8100
 #endif
@@ -26,6 +30,10 @@
 
 #ifndef ETH_HLEN
 #define ETH_HLEN 14  // Ethernet header length
+#endif
+
+#ifndef IPPROTO_IPV6
+#define IPPROTO_IPV6 41
 #endif
 
 // TC action definitions (if not in vmlinux.h)
@@ -135,6 +143,21 @@ static __always_inline int parse_packet_xdp(struct xdp_md* ctx, struct policy_ke
         }
         h_proto = bpf_ntohs(*(__be16*)((char*)vlan + 2));
         l3_offset += 4;
+    }
+    if(h_proto == ETH_P_IPV6)
+    {
+        key->src_ip = 0;
+        key->dst_ip = 0;
+        key->protocol = IPPROTO_IPV6;
+        key->src_port = 0;
+        key->dst_port = 0;
+
+        // Explicitly zero padding for consistent hash lookup
+        key->pad[0] = 0;
+        key->pad[1] = 0;
+        key->pad[2] = 0;
+
+        return 0;
     }
     if(h_proto != ETH_P_IP)
         return -1;
@@ -357,6 +380,21 @@ static __always_inline int parse_packet_tc(struct __sk_buff* skb, struct policy_
             return -1;
         h_proto = bpf_ntohs(*(__be16*)((char*)vlan + 2));
         l3_offset += 4;
+    }
+    if(h_proto == ETH_P_IPV6)
+    {
+        key->src_ip = 0;
+        key->dst_ip = 0;
+        key->protocol = IPPROTO_IPV6;
+        key->src_port = 0;
+        key->dst_port = 0;
+
+        // Explicitly zero padding for consistent hash lookup
+        key->pad[0] = 0;
+        key->pad[1] = 0;
+        key->pad[2] = 0;
+
+        return 0;
     }
     if(h_proto != ETH_P_IP)
         return -1;
