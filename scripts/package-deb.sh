@@ -353,7 +353,7 @@ Version: ${pkg_version}-1
 Architecture: amd64
 Maintainer: PEPCTL Development Team <dev@pepctl.org>
 Installed-Size: $(du -sk debian/pepctl | cut -f1)
-Depends: libbpf1, libelf1, libboost-system1.83.0, libboost-filesystem1.83.0, libboost-thread1.83.0, libboost-program-options1.83.0, libspdlog1, libfmt9, systemd, libc6, libstdc++6
+Depends: libbpf1, libelf1, libboost-system1.83.0, libboost-filesystem1.83.0, libboost-thread1.83.0, libboost-program-options1.83.0, libspdlog1.12 | libspdlog1, libfmt9 | libfmt8, systemd, libc6, libstdc++6
 Recommends: linux-tools-generic, bpftool
 Suggests: wireshark, tcpdump, netcat-openbsd
 Section: net

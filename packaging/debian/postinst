@@ -98,14 +98,19 @@ EOF
         
         # Reload systemd daemon to pick up new service file
         echo "Reloading systemd daemon..."
-        systemctl daemon-reload
+        systemctl daemon-reload || true
         
         # Enable and start the service
         echo "Enabling pepctl service..."
-        systemctl enable pepctl
+        systemctl enable pepctl || true
         
         echo "Starting pepctl service..."
-        systemctl start pepctl
+        systemd_state="$(systemctl is-system-running 2>/dev/null || true)"
+        if [[ "$systemd_state" == "running" || "$systemd_state" == "degraded" ]]; then
+            systemctl --no-block start pepctl || true
+        else
+            echo "Systemd is not running; skipping automatic service start"
+        fi
         
         # Check if BTF is available (required for modern eBPF)
         if [ -f /sys/kernel/btf/vmlinux ]; then

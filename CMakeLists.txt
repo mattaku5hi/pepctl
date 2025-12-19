@@ -16,6 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Build options
 option(ENABLE_TESTS "Enable building of test suites" ON)
 option(ENABLE_COVERAGE "Enable code coverage instrumentation" OFF)
+option(ENABLE_SYSTEMD_NOTIFY "Enable systemd Type=notify support (sd_notify READY/STOPPING)" OFF)
 
 # Enable debug symbols and optimization flags
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -DDEBUG")
@@ -43,8 +44,9 @@ pkg_check_modules(SPDLOG REQUIRED spdlog)
 pkg_check_modules(FMT REQUIRED fmt)
 pkg_check_modules(LIBSYSTEMD REQUIRED libsystemd)
 
-# Define systemd support (optional)
-add_definitions(-DSYSTEMD_NOTIFY_SUPPORT)
+if(ENABLE_SYSTEMD_NOTIFY)
+    add_definitions(-DSYSTEMD_NOTIFY_SUPPORT)
+endif()
 
 # JSON support for structured logging
 find_package(nlohmann_json QUIET)

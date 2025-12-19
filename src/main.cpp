@@ -18,9 +18,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#ifdef SYSTEMD_NOTIFY_SUPPORT
-#include <systemd/sd-daemon.h>
-#endif
 #include <unistd.h>
 #include <thread>
 #include <unordered_set>
@@ -29,6 +26,7 @@
 #include "pepctl/logger.h"
 
 
+// Constants
 #define PEPCTL_DEFAULT_CONFIG_PATH          "/etc/pepctl/config.json"
 #define PEPCTL_DEFAULT_EBPF_PATH            "/usr/share/pepctl/ebpf/packet_filter.o"
 #define PEPCTL_DEV_NULL_PATH                "/dev/null"
@@ -43,7 +41,7 @@ std::string gCurrentConfigPath;  // Store config path for reload
 
 void validateEbpfProgramPath(const std::string& path);
 
-
+// Signal handler
 void signalHandler(int signum)
 {
     switch(signum)
@@ -81,33 +79,7 @@ void signalHandler(int signum)
     }
 }
 
-/// @brief Setup signal handlers for daemon
-//
-// SIGNAL EXPLANATIONS:
-//
-// SIGTERM (15) - "Terminate":
-// - Sent by: systemctl stop, kill <pid>, system shutdown
-// - Purpose: Polite request to terminate gracefully
-// - Action: Clean shutdown, save state, close files
-//
-// SIGINT (2) - "Interrupt":
-// - Sent by: Ctrl+C in terminal, kill -INT <pid>
-// - Purpose: Interactive termination request
-// - Action: Same as SIGTERM for daemons
-//
-// SIGHUP (1) - "Hang Up":
-// - Historical: Terminal disconnection
-// - Modern: Configuration reload signal
-// - Sent by: kill -HUP <pid>, systemctl reload
-// - Purpose: Reload config without restarting
-// - Action: Re-read config files, update runtime settings
-//
-// SIGPIPE (13) - "Broken Pipe":
-// - Sent by: Writing to closed socket/pipe
-// - Default: Terminates process
-// - Why ignore: Network servers handle connection errors explicitly
-// - Action: Ignore, handle network errors in code
-//
+// Setup signal handlers
 void setupSignalHandlers()
 {
     struct sigaction sa{};
@@ -130,9 +102,7 @@ void setupSignalHandlers()
     signal(SIGPIPE, SIG_IGN);
 }
 
-/// @brief Load configuration from JSON file
-/// @param config_path Path to configuration file
-/// @return Configuration
+// Load configuration from JSON file
 auto loadConfig(const std::string& config_path) -> pepctl::Config
 {
     pepctl::Config config;
@@ -154,10 +124,8 @@ auto loadConfig(const std::string& config_path) -> pepctl::Config
             throw std::runtime_error("Cannot open config file");
         }
 
-        /*
-            Create empty JSON object on stack
-            Equivalent to empty JSON object ({} in JSON notation)
-        */
+        // Create empty JSON object on stack
+        // Equivalent to empty JSON object ({} in JSON notation)
         nlohmann::json jsonConfig;  // ~64 bytes on stack
 
         // Parse JSON from file stream using extraction operator
@@ -215,8 +183,7 @@ auto loadConfig(const std::string& config_path) -> pepctl::Config
     return config;
 }
 
-/// @brief Handle configuration reload (called from main loop)
-/// @return true if reload successful, false otherwise
+// Handle configuration reload (called from main loop)
 auto handleConfigReload() -> bool
 {
     if(!gConfigReloadRequested)
@@ -252,9 +219,7 @@ auto handleConfigReload() -> bool
     }
 }
 
-/// @brief Create directory recursively (like mkdir -p)
-/// @param path Directory path to create
-/// @return true if successful or directory already exists
+// Create directory recursively (like mkdir -p)
 auto createDirectoryRecursive(const std::string& path) -> bool
 {
     struct stat st{};
@@ -284,8 +249,7 @@ auto createDirectoryRecursive(const std::string& path) -> bool
     return true;
 }
 
-/// @brief Daemonize the process (Double-fork method)
-/// @return true if successful, false otherwise
+// Daemonize the process (Double-fork method)
 auto daemonize() -> bool
 {
     // Separate from parent process
@@ -362,15 +326,14 @@ auto daemonize() -> bool
     return true;
 }
 
-/// @brief Print version information
+// Print version information
 void printVersion()
 {
     std::cout << "pepctl version " << pepctl::version << '\n';
     std::cout << "Policy Enforcement Point Control Utility" << '\n';
 }
 
-/// @brief Print usage information
-/// @param desc Options description
+// Print usage information
 void printUsage(const boost::program_options::options_description& desc)
 {
     std::cout << "PEPCTL - Policy Enforcement Point Control Utility" << '\n';
@@ -384,8 +347,7 @@ void printUsage(const boost::program_options::options_description& desc)
     std::cout << desc << '\n';
 }
 
-/// @brief Validate port number
-/// @param port Port number
+// Validate port number
 void validatePort(uint16_t port)
 {
     if(port < 1024)
@@ -395,8 +357,7 @@ void validatePort(uint16_t port)
     }
 }
 
-/// @brief Validate log level
-/// @param level Log level
+// Validate log level
 void validateLogLevel(const std::string& level)
 {
     // Using unordered_set for O(1) lookup
@@ -410,8 +371,7 @@ void validateLogLevel(const std::string& level)
     }
 }
 
-/// @brief Validate eBPF program path
-/// @param path eBPF program file path
+// Validate eBPF program path
 void validateEbpfProgramPath(const std::string& path)
 {
     if(path.empty())
@@ -436,15 +396,10 @@ void validateEbpfProgramPath(const std::string& path)
     }
 }
 
-/// @brief Main function
-/// @param argc Number of arguments
-/// @param argv Arguments
-/// @return Return code
+// Main function
 auto main(int argc, char* argv[]) -> int  // trailing return type
 {
-    //
-    //         Parse command line arguments
-    //
+    // Parse command line arguments
     boost::program_options::options_description desc("Options");
     {
         desc.add_options()("help,h", "Show this help message")("version,v",
@@ -535,6 +490,15 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         config.daemonMode = true;
     }
 
+    const bool runningUnderSystemd = (getenv("NOTIFY_SOCKET") != nullptr)
+                                    || (getenv("INVOCATION_ID") != nullptr);
+    if(runningUnderSystemd && config.daemonMode)
+    {
+        std::cerr << "main.cpp: daemon mode requested, but running under systemd; disabling daemonize()"
+                  << '\n';
+        config.daemonMode = false;
+    }
+
     std::cout << "Starting PEPCTL daemon..." << '\n';
     std::cout << "Interface: " << config.interfaceName << '\n';
     std::cout << "Admin port: " << config.adminPort << '\n';
@@ -621,9 +585,14 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         std::cerr << "Failed to start daemon" << '\n';
         if(gDaemon)
         {
-            gDaemon->getLogger().info(
-                pepctl::LogContext(pepctl::LogCategory::SYSTEM),
-                "main.cpp: gDaemon->start() returned false, cleaning up and exiting");
+            try
+            {
+                gDaemon->getLogger().info(
+                    pepctl::LogContext(pepctl::LogCategory::SYSTEM),
+                    "main.cpp: gDaemon->start() returned false, cleaning up and exiting");
+            }
+            catch(...)
+            {}
         }
 
         std::cout << "main.cpp: About to call gDaemon.reset() after failed start" << '\n';
@@ -675,11 +644,6 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         return EXIT_FAILURE;
     }
 
-#ifdef SYSTEMD_NOTIFY_SUPPORT
-    // Notify systemd that the service is ready (Type=notify)
-    (void)sd_notify(0, "READY=1");
-#endif
-
     // Main loop
     while(gShutdownRequested.load() == false)
     {
@@ -699,9 +663,6 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
     // Clean shutdown
     if(gDaemon != nullptr)
     {
-#ifdef SYSTEMD_NOTIFY_SUPPORT
-        (void)sd_notify(0, "STOPPING=1");
-#endif
         if(gDaemon)
         {
             try
