@@ -44,7 +44,7 @@ pkg_check_modules(FMT REQUIRED fmt)
 pkg_check_modules(LIBSYSTEMD REQUIRED libsystemd)
 
 # Define systemd support (optional)
-# add_definitions(-DSYSTEMD_NOTIFY_SUPPORT)
+add_definitions(-DSYSTEMD_NOTIFY_SUPPORT)
 
 # JSON support for structured logging
 find_package(nlohmann_json QUIET)

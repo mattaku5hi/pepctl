@@ -327,8 +327,10 @@ build_deb_package_fast() {
     install -m 644 README.md debian/pepctl/usr/share/doc/pepctl/
     
     # Install version information
-    echo "$(cat VERSION)" > debian/pepctl/usr/share/pepctl/VERSION
-    echo "$(cat VERSION)-1" > debian/pepctl/usr/share/pepctl/DEB_VERSION
+    local pkg_version
+    pkg_version="$(tr -d '\r\n' < VERSION | tr -d '[:space:]')"
+    echo "$pkg_version" > debian/pepctl/usr/share/pepctl/VERSION
+    echo "$pkg_version-1" > debian/pepctl/usr/share/pepctl/DEB_VERSION
     
     # Copy packaging control files
     cp -r packaging/debian/* debian/
@@ -347,7 +349,7 @@ build_deb_package_fast() {
     # Create control file
     cat > debian/pepctl/DEBIAN/control << EOF
 Package: pepctl
-Version: $(cat VERSION)-1
+Version: ${pkg_version}-1
 Architecture: amd64
 Maintainer: PEPCTL Development Team <dev@pepctl.org>
 Installed-Size: $(du -sk debian/pepctl | cut -f1)
@@ -378,13 +380,13 @@ EOF
     log_info "Creating .deb package..."
     mkdir -p dist
     
-    if dpkg-deb --build debian/pepctl dist/pepctl_$(cat VERSION)-1_amd64.deb; then
+    if dpkg-deb --build "debian/pepctl" "dist/pepctl_${pkg_version}-1_amd64.deb"; then
         log_success "Package built successfully using existing build!"
         
         # Clean up temporary files
         rm -rf debian
         
-        log_success "Package created: dist/pepctl_$(cat VERSION)-1_amd64.deb"
+        log_success "Package created: dist/pepctl_${pkg_version}-1_amd64.deb"
         ls -la dist/pepctl_*
     else
         log_error "Package build failed"

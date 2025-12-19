@@ -6,8 +6,9 @@ Wants=network-online.target
 RequiresMountsFor=/sys/fs/bpf
 
 [Service]
-Type=simple
-ExecStart=/usr/bin/pepctl --config /etc/pepctl/pepctl.conf
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/pepctl --config /etc/pepctl/configs/pepctl.conf
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=mixed
 KillSignal=SIGTERM

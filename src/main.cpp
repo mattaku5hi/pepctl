@@ -19,7 +19,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #ifdef SYSTEMD_NOTIFY_SUPPORT
-#include <systemd/sd-notify.h>
+#include <systemd/sd-daemon.h>
 #endif
 #include <unistd.h>
 #include <thread>
@@ -35,8 +35,7 @@
 #define PEPCTL_ROOT_DIR                     "/var/run/pepctl"
 
 
-//
-//     Global variables for signal handlers (required by signal handling)
+// Global variables for signal handlers (required by signal handling)
 std::unique_ptr<pepctl::IPepctlDaemon> gDaemon;
 std::atomic<bool> gShutdownRequested{false};
 std::atomic<bool> gConfigReloadRequested{false};
@@ -82,8 +81,7 @@ void signalHandler(int signum)
     }
 }
 
-//
-// @brief Setup signal handlers for daemon
+/// @brief Setup signal handlers for daemon
 //
 // SIGNAL EXPLANATIONS:
 //
@@ -118,29 +116,23 @@ void setupSignalHandlers()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
 
-    //
-    //         Install handlers for graceful shutdown and config reload
-    //
+    // Install handlers for graceful shutdown and config reload
     sigaction(SIGTERM, &sa, nullptr);
     sigaction(SIGINT, &sa, nullptr);
     sigaction(SIGHUP, &sa, nullptr);
 
-    //
-    //         Ignore SIGPIPE - Critical for network daemons!
-    //         - Client connects to admin API
-    //         - Client closes connection abruptly
-    //         - Daemon tries to send response (SIGPIPE)
-    //         - Without SIG_IGN: daemon crashes with SIGPIPE
-    //         - With SIG_IGN: write() returns -1 with EPIPE, daemon continues
-    //
+    // Ignore SIGPIPE - Critical for network daemons!
+    // - Client connects to admin API
+    // - Client closes connection abruptly
+    // - Daemon tries to send response (SIGPIPE)
+    // - Without SIG_IGN: daemon crashes with SIGPIPE
+    // - With SIG_IGN: write() returns -1 with EPIPE, daemon continues
     signal(SIGPIPE, SIG_IGN);
 }
 
-//
-// @brief Load configuration from JSON file
-// @param config_path Path to configuration file
-// @return Configuration
-//
+/// @brief Load configuration from JSON file
+/// @param config_path Path to configuration file
+/// @return Configuration
 auto loadConfig(const std::string& config_path) -> pepctl::Config
 {
     pepctl::Config config;
@@ -153,9 +145,7 @@ auto loadConfig(const std::string& config_path) -> pepctl::Config
         return config;
     }
 
-    //
-    //         Try to load configuration from file
-    //
+    // Try to load configuration from file
     try
     {
         std::ifstream config_file(config_path);
@@ -170,19 +160,15 @@ auto loadConfig(const std::string& config_path) -> pepctl::Config
         */
         nlohmann::json jsonConfig;  // ~64 bytes on stack
 
-        //
-        //             Parse JSON from file stream using extraction operator
-        //             Equivalent to: json_config = nlohmann::json::parse(config_file)
-        //             1. File reading: O(n) - reads entire file
-        //             2. Tokenization: O(n) - scans each character once
-        //             3. Parsing: O(n) - processes each token once
-        //             4. Tree building: O(n) - creates nodes for content
-        //
+        // Parse JSON from file stream using extraction operator
+        // Equivalent to: json_config = nlohmann::json::parse(config_file)
+        // 1. File reading: O(n) - reads entire file
+        // 2. Tokenization: O(n) - scans each character once
+        // 3. Parsing: O(n) - processes each token once
+        // 4. Tree building: O(n) - creates nodes for content
         config_file >> jsonConfig;  // heap allocation for temp buffer ~ file size
 
-        //
-        //             Use safe chain access to load configuration
-        //
+        // Use safe chain access to load configuration
         config.configFilePath = config_path;
         config.daemonMode =
             jsonConfig.value("daemon", nlohmann::json::object()).value("mode", false);
@@ -215,9 +201,7 @@ auto loadConfig(const std::string& config_path) -> pepctl::Config
         config.ebpfProgramPath = PEPCTL_DEFAULT_EBPF_PATH;
     }
 
-    //
-    //         Validate eBPF program path after configuration is fully loaded
-    //
+    // Validate eBPF program path after configuration is fully loaded
     try
     {
         validateEbpfProgramPath(config.ebpfProgramPath);
@@ -231,10 +215,8 @@ auto loadConfig(const std::string& config_path) -> pepctl::Config
     return config;
 }
 
-//
-// @brief Handle configuration reload (called from main loop)
-// @return true if reload successful, false otherwise
-//
+/// @brief Handle configuration reload (called from main loop)
+/// @return true if reload successful, false otherwise
 auto handleConfigReload() -> bool
 {
     if(!gConfigReloadRequested)
@@ -246,19 +228,13 @@ auto handleConfigReload() -> bool
 
     try
     {
-        //
-        //             Load new configuration
-        //
+        // Load new configuration
         pepctl::Config newConfig = loadConfig(gCurrentConfigPath);
 
-        //
-        //             Apply new configuration to running daemon
-        //
+        // Apply new configuration to running daemon
         if(gDaemon != nullptr)
         {
-            //
-            //                 Update runtime configuration
-            //
+            // Update runtime configuration
 
             std::cout << "Configuration reloaded successfully" << '\n';
             std::cout << "Note: Some settings may require daemon restart to take effect" << '\n';
@@ -276,11 +252,9 @@ auto handleConfigReload() -> bool
     }
 }
 
-//
-// @brief Create directory recursively (like mkdir -p)
-// @param path Directory path to create
-// @return true if successful or directory already exists
-//
+/// @brief Create directory recursively (like mkdir -p)
+/// @param path Directory path to create
+/// @return true if successful or directory already exists
 auto createDirectoryRecursive(const std::string& path) -> bool
 {
     struct stat st{};
@@ -300,9 +274,7 @@ auto createDirectoryRecursive(const std::string& path) -> bool
         }
     }
 
-    //
-    //         Create this directory
-    //
+    // Create this directory
     if(mkdir(path.c_str(), 0755) != 0)
     {
         std::cerr << "Failed to create directory " << path << ": " << strerror(errno) << '\n';
@@ -312,15 +284,11 @@ auto createDirectoryRecursive(const std::string& path) -> bool
     return true;
 }
 
-//
-// @brief Daemonize the process (Double-fork method)
-// @return true if successful, false otherwise
-//
+/// @brief Daemonize the process (Double-fork method)
+/// @return true if successful, false otherwise
 auto daemonize() -> bool
 {
-    //
-    //         Separate from parent process
-    //
+    // Separate from parent process
     pid_t pid = fork();
 
     if(pid < 0)
@@ -334,19 +302,15 @@ auto daemonize() -> bool
         std::exit(EXIT_SUCCESS);  // Parent exits here
     }
 
-    //
-    //         Child becomes session leader of new session and process group leader of new process group
-    //
+    // Child becomes session leader of new session and process group leader of new process group
     if(setsid() < 0)
     {
         std::cerr << "setsid failed: " << strerror(errno) << '\n';
         return false;
     }
 
-    //
-    //         Ensure daemon truly runs in background without terminal
-    //         Industry standard for robust daemons
-    //
+    // Ensure daemon truly runs in background without terminal
+    // Industry standard for robust daemons
     pid = fork();
     if(pid < 0)
     {
@@ -359,28 +323,22 @@ auto daemonize() -> bool
         std::exit(EXIT_SUCCESS);  // First child exits, second child continues
     }
 
-    //
-    //         Create the root directory if it doesn't exist
-    //
+    // Create the root directory if it doesn't exist
     if(!createDirectoryRecursive(PEPCTL_ROOT_DIR))
     {
         std::cerr << "Warning: Failed to create directory " << PEPCTL_ROOT_DIR << '\n';
     }
 
-    //
-    //         Prevent daemon from holding references to directories
-    //
+    // Prevent daemon from holding references to directories
     if(chdir(PEPCTL_ROOT_DIR) != 0)
     {
         std::cerr << "Warning: Failed to change directory to " << PEPCTL_ROOT_DIR << ": "
                   << strerror(errno) << '\n';
     }
 
-    //
-    //         Set no restrictions on file creation
-    //         e.g. 666 & ~0 (777) = 666
-    //         Don't forget to make compiler happy and check the result
-    //
+    // Set no restrictions on file creation
+    // e.g. 666 & ~0 (777) = 666
+    // Don't forget to make compiler happy and check the result
     int result = umask(0);
     static_cast<void>(result);
 
@@ -404,19 +362,15 @@ auto daemonize() -> bool
     return true;
 }
 
-//
-// @brief Print version information
-//
+/// @brief Print version information
 void printVersion()
 {
     std::cout << "pepctl version " << pepctl::version << '\n';
     std::cout << "Policy Enforcement Point Control Utility" << '\n';
 }
 
-//
-// @brief Print usage information
-// @param desc Options description
-//
+/// @brief Print usage information
+/// @param desc Options description
 void printUsage(const boost::program_options::options_description& desc)
 {
     std::cout << "PEPCTL - Policy Enforcement Point Control Utility" << '\n';
@@ -430,10 +384,8 @@ void printUsage(const boost::program_options::options_description& desc)
     std::cout << desc << '\n';
 }
 
-//
-// @brief Validate port number
-// @param port Port number
-//
+/// @brief Validate port number
+/// @param port Port number
 void validatePort(uint16_t port)
 {
     if(port < 1024)
@@ -443,15 +395,11 @@ void validatePort(uint16_t port)
     }
 }
 
-//
-// @brief Validate log level
-// @param level Log level
-//
+/// @brief Validate log level
+/// @param level Log level
 void validateLogLevel(const std::string& level)
 {
-    //
-    //         Using unordered_set for O(1) lookup
-    //
+    // Using unordered_set for O(1) lookup
     static const std::unordered_set<std::string> validLevels = {
         "trace", "debug", "info", "warn", "warning", "error", "critical", "off"};
 
@@ -462,10 +410,8 @@ void validateLogLevel(const std::string& level)
     }
 }
 
-//
-// @brief Validate eBPF program path
-// @param path eBPF program file path
-//
+/// @brief Validate eBPF program path
+/// @param path eBPF program file path
 void validateEbpfProgramPath(const std::string& path)
 {
     if(path.empty())
@@ -490,12 +436,10 @@ void validateEbpfProgramPath(const std::string& path)
     }
 }
 
-//
-// @brief Main function
-// @param argc Number of arguments
-// @param argv Arguments
-// @return Return code
-//
+/// @brief Main function
+/// @param argc Number of arguments
+/// @param argv Arguments
+/// @return Return code
 auto main(int argc, char* argv[]) -> int  // trailing return type
 {
     //
@@ -510,31 +454,25 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
             "Configuration file path")("daemon,d", "Run as daemon (fork to background)");
     }
 
-    //
-    //         variables_map is type-safe storage with metadata
-    //         - Stores actual typed values (uint16_t, bool, string, etc.)
-    //         - Plus metadata: was it set? from command line or config file? default value?
-    //         - Type safety: vm["port"].as<uint16_t>() vs std::stoi(simple_map["port"])
-    //         - Multiple sources: Can merge command line, config files, environment variables
-    //         - Validation: Built-in type checking and constraints
-    //
+    // variables_map is type-safe storage with metadata
+    // - Stores actual typed values (uint16_t, bool, string, etc.)
+    // - Plus metadata: was it set? from command line or config file? default value?
+    // - Type safety: vm["port"].as<uint16_t>() vs std::stoi(simple_map["port"])
+    // - Multiple sources: Can merge command line, config files, environment variables
+    // - Validation: Built-in type checking and constraints
     boost::program_options::variables_map vm;
 
     try
     {
-        //
-        //             store():
-        //             - Parses the command line arguments according to the description (desc)
-        //             - Stores the raw parsed values in the variables_map
-        //             - Does NOT trigger any validation or default value assignment yet
-        //             - Just populates the map with what was found
-        //
+        // store():
+        // - Parses the command line arguments according to the description (desc)
+        // - Stores the raw parsed values in the variables_map
+        // - Does NOT trigger any validation or default value assignment yet
+        // - Just populates the map with what was found
         boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc),
                                       vm);
 
-        //
-        //             Handle help and version options BEFORE validation
-        //
+        // Handle help and version options BEFORE validation
         if(vm.count("help") != 0U)
         {
             printUsage(desc);
@@ -553,14 +491,12 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
             return EXIT_SUCCESS;
         }
 
-        //
-        //             notify():
-        //             - Triggers all the validation and post-processing
-        //             - Calls any custom validators you've defined (like validatePort, validateLogLevel)
-        //             - Applies default values for options not provided
-        //             - Throws exceptions if required options are missing
-        //             - Executes any custom actions (like help/version handlers)
-        //
+        // notify():
+        // - Triggers all the validation and post-processing
+        // - Calls any custom validators you've defined (like validatePort, validateLogLevel)
+        // - Applies default values for options not provided
+        // - Throws exceptions if required options are missing
+        // - Executes any custom actions (like help/version handlers)
         boost::program_options::notify(vm);
     }
     catch(const boost::program_options::required_option& e)
@@ -580,9 +516,7 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         return EXIT_FAILURE;
     }
 
-    //
-    //         Check for root privileges
-    //
+    // Check for root privileges
     if(geteuid() != 0)
     {
         std::cerr << "[FATAL] pepctl must be run as root (euid=0) for eBPF and network operations."
@@ -590,16 +524,12 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         return EXIT_FAILURE;
     }
 
-    //
-    //         Load configuration and store path for reloads
-    //
+    // Load configuration and store path for reloads
     gCurrentConfigPath = vm["config"].as<std::string>();
     pepctl::Config config = loadConfig(gCurrentConfigPath);
 
-    //
-    //         Set daemon mode if specified on command line
-    //         All other configuration comes from config file only
-    //
+    // Set daemon mode if specified on command line
+    // All other configuration comes from config file only
     if(vm.count("daemon") != 0U)
     {
         config.daemonMode = true;
@@ -611,9 +541,7 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
     std::cout << "Metrics port: " << config.metricsPort << '\n';
     std::cout << "Log level: " << config.logLevel << '\n';
 
-    //
-    //         Initialize logger early (before daemon creation) so we can inject it.
-    //
+    // Initialize logger early (before daemon creation) so we can inject it.
     auto logger = std::shared_ptr<pepctl::Logger>{};
     {
         pepctl::LoggerConfig logConfig;
@@ -658,9 +586,7 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         logger = pepctl::Logger::createWithFallback(logConfig, isSystemdService);
     }
 
-    //
-    //         Daemonize process if required
-    //
+    // Daemonize process if required
     if(config.daemonMode)
     {
         if(daemonize() == false)
@@ -670,14 +596,10 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         }
     }
 
-    //
-    //         Setup signal handlers
-    //
+    // Setup signal handlers
     setupSignalHandlers();
 
-    //
-    //         Create and initialize daemon
-    //
+    // Create and initialize daemon
     gDaemon = pepctl::createDaemon(logger);
     if(gDaemon == nullptr)
     {
@@ -685,9 +607,7 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         return EXIT_FAILURE;
     }
 
-    //
-    //         Initialize daemon
-    //
+    // Initialize daemon
     if(gDaemon->initialize(config) == false)
     {
         std::cerr << "Failed to initialize daemon" << '\n';
@@ -695,9 +615,7 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         return EXIT_FAILURE;
     }
 
-    //
-    //         Start daemon
-    //
+    // Start daemon
     if(gDaemon->start() == false)
     {
         std::cerr << "Failed to start daemon" << '\n';
@@ -711,9 +629,7 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         std::cout << "main.cpp: About to call gDaemon.reset() after failed start" << '\n';
         std::cout.flush();
 
-        //
-        //             Set up a timeout mechanism to prevent hanging
-        //
+        // Set up a timeout mechanism to prevent hanging
         std::atomic<bool> resetCompleted{false};
         std::thread resetThread([&]() {
             try
@@ -733,9 +649,7 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
             }
         });
 
-        //
-        //             Wait for reset to complete with timeout
-        //
+        // Wait for reset to complete with timeout
         auto start = std::chrono::steady_clock::now();
         while(resetCompleted.load() == false)
         {
@@ -761,9 +675,12 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         return EXIT_FAILURE;
     }
 
-    //
-    //         Main loop
-    //
+#ifdef SYSTEMD_NOTIFY_SUPPORT
+    // Notify systemd that the service is ready (Type=notify)
+    (void)sd_notify(0, "READY=1");
+#endif
+
+    // Main loop
     while(gShutdownRequested.load() == false)
     {
         if(gConfigReloadRequested.load())
@@ -779,11 +696,12 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    //
-    //         Clean shutdown
-    //
+    // Clean shutdown
     if(gDaemon != nullptr)
     {
+#ifdef SYSTEMD_NOTIFY_SUPPORT
+        (void)sd_notify(0, "STOPPING=1");
+#endif
         if(gDaemon)
         {
             try
@@ -809,9 +727,7 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
         std::cout << "main.cpp: About to call gDaemon.reset()" << '\n';
         std::cout.flush();
 
-        //
-        //             Set up a timeout mechanism to prevent hanging
-        //
+        // Set up a timeout mechanism to prevent hanging
         std::atomic<bool> resetCompleted{false};
         std::thread resetThread([&]() {
             try
@@ -831,9 +747,7 @@ auto main(int argc, char* argv[]) -> int  // trailing return type
             }
         });
 
-        //
-        //             Wait for reset to complete with timeout
-        //
+        // Wait for reset to complete with timeout
         auto start = std::chrono::steady_clock::now();
         while(resetCompleted.load() == false)
         {
