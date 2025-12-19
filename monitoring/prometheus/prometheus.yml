@@ -15,7 +15,7 @@ scrape_configs:
   # PEPCTL daemon metrics (real interface)
   - job_name: "pepctl"
     static_configs:
-      - targets: ["192.168.3.66:9090"]
+      - targets: ["192.168.3.28:9090"]
     scrape_interval: 5s
     metrics_path: /metrics
     scheme: http 

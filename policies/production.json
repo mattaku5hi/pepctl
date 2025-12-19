@@ -8,7 +8,7 @@
       "protocol": "TCP"
     },
     "dst": {
-      "ip": "192.168.3.66",
+      "ip": "0.0.0.0",
       "port": 22,
       "protocol": "TCP"
     }
@@ -22,7 +22,7 @@
       "protocol": "TCP"
     },
     "dst": {
-      "ip": "192.168.3.66",
+      "ip": "0.0.0.0",
       "port": 80,
       "protocol": "TCP"
     }
@@ -36,7 +36,7 @@
       "protocol": "TCP"
     },
     "dst": {
-      "ip": "192.168.3.66",
+      "ip": "0.0.0.0",
       "port": 443,
       "protocol": "TCP"
     }
@@ -50,7 +50,7 @@
       "protocol": "TCP"
     },
     "dst": {
-      "ip": "192.168.3.66",
+      "ip": "0.0.0.0",
       "port": 8080,
       "protocol": "TCP"
     }
@@ -64,8 +64,36 @@
       "protocol": "TCP"
     },
     "dst": {
-      "ip": "192.168.3.66",
+      "ip": "0.0.0.0",
       "port": 9090,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "allow_demo_inbound",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 50080,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "log_demo_inbound",
+    "action": "LOG_ONLY",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 50081,
       "protocol": "TCP"
     }
   },
@@ -78,7 +106,7 @@
       "protocol": "UDP"
     },
     "dst": {
-      "ip": "192.168.3.66",
+      "ip": "0.0.0.0",
       "port": 53,
       "protocol": "UDP"
     }
@@ -92,8 +120,8 @@
       "protocol": "TCP"
     },
     "dst": {
-      "ip": "192.168.3.66",
-      "port": 23,
+      "ip": "0.0.0.0",
+      "port": 50082,
       "protocol": "TCP"
     }
   },
@@ -106,9 +134,10 @@
       "protocol": "TCP"
     },
     "dst": {
-      "ip": "192.168.3.66",
-      "port": 21,
+      "ip": "0.0.0.0",
+      "port": 50083,
       "protocol": "TCP"
-    }
+    },
+    "rate_limit_bps": 100
   }
-] 
+]

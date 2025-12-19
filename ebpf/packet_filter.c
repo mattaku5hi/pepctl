@@ -297,7 +297,23 @@ int packet_filter_modern(struct xdp_md* ctx)
 
     if(policy == NULL)
     {
-        // Try wildcard ports
+        // Try wildcard source port (0)
+        struct policy_key wildcard_src_port_key = key;
+        wildcard_src_port_key.src_port = 0;
+        policy = bpf_map_lookup_elem(&policy_map, &wildcard_src_port_key);
+    }
+
+    if(policy == NULL)
+    {
+        // Try wildcard destination port (0)
+        struct policy_key wildcard_dst_port_key = key;
+        wildcard_dst_port_key.dst_port = 0;
+        policy = bpf_map_lookup_elem(&policy_map, &wildcard_dst_port_key);
+    }
+
+    if(policy == NULL)
+    {
+        // Try wildcard both ports
         struct policy_key wildcard_ports_key = key;
         wildcard_ports_key.src_port = 0;
         wildcard_ports_key.dst_port = 0;
@@ -501,7 +517,23 @@ int packet_filter_tc(struct __sk_buff* skb)
 
     if(policy == NULL)
     {
-        // Try wildcard ports
+        // Try wildcard source port (0)
+        struct policy_key wildcard_src_port_key = key;
+        wildcard_src_port_key.src_port = 0;
+        policy = bpf_map_lookup_elem(&policy_map, &wildcard_src_port_key);
+    }
+
+    if(policy == NULL)
+    {
+        // Try wildcard destination port (0)
+        struct policy_key wildcard_dst_port_key = key;
+        wildcard_dst_port_key.dst_port = 0;
+        policy = bpf_map_lookup_elem(&policy_map, &wildcard_dst_port_key);
+    }
+
+    if(policy == NULL)
+    {
+        // Try wildcard both ports
         struct policy_key wildcard_ports_key = key;
         wildcard_ports_key.src_port = 0;
         wildcard_ports_key.dst_port = 0;

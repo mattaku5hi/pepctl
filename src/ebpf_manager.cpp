@@ -956,9 +956,7 @@ auto EbpfProgramLoader::compileProgram(const std::string& source_path,
 
 auto EbpfProgramLoader::validateProgram(const std::string& program_path) -> bool
 {
-    //
-    //       Try to open and load the program
-    //
+    // Try to open and load the program
     struct bpf_object* obj = bpf_object__open(program_path.c_str());
     if(obj == nullptr)
     {

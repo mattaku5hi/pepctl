@@ -450,16 +450,22 @@ auto PolicyEngine::isRateLimited(const PolicyKey& key,
     auto now = std::chrono::system_clock::now();
     auto currentSecond = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
 
+    // Aggregate rate limiting across ephemeral client source ports.
+    // For TCP connects, src_port changes on each new connection, which would prevent
+    // limits from triggering if we used the full 5-tuple.
+    PolicyKey rateKey = key;
+    rateKey.src_port = 0;
+
     std::lock_guard<std::mutex> lock(gPolicyEngineInstance->m_rateLimitMutex);
 
-    auto it = gPolicyEngineInstance->m_rateLimits->find(key);
+    auto it = gPolicyEngineInstance->m_rateLimits->find(rateKey);
     if(it == gPolicyEngineInstance->m_rateLimits->end())
     {
         // Create new rate limit state
         auto rateState = std::make_unique<RateLimitState>(limit_bytes_per_second);
         rateState->bytes_this_second.store(packet_size);
         rateState->last_reset_time.store(currentSecond.count());
-        gPolicyEngineInstance->m_rateLimits->emplace(key, std::move(rateState));
+        gPolicyEngineInstance->m_rateLimits->emplace(rateKey, std::move(rateState));
         return false;  // First packet is always allowed
     }
 

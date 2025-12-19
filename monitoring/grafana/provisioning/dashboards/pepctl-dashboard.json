@@ -1,283 +1,281 @@
 {
-  "dashboard": {
-    "id": null,
-    "uid": "pepctl-dashboard",
-    "title": "PEPCTL Network Policy Enforcement Dashboard",
-    "tags": [
-      "pepctl",
-      "network",
-      "security",
-      "ebpf"
-    ],
-    "style": "dark",
-    "timezone": "browser",
-    "panels": [
-      {
-        "id": 1,
-        "title": "System Overview",
-        "type": "stat",
-        "targets": [
-          {
-            "expr": "pepctl_uptime_seconds",
-            "legendFormat": "Uptime (seconds)"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "thresholds": {
-              "steps": [
-                {
-                  "color": "green",
-                  "value": null
-                }
-              ]
-            },
-            "unit": "s"
-          }
-        },
-        "gridPos": {
-          "h": 8,
-          "w": 6,
-          "x": 0,
-          "y": 0
+  "id": null,
+  "uid": "pepctl-dashboard",
+  "title": "PEPCTL Network Policy Enforcement Dashboard",
+  "tags": [
+    "pepctl",
+    "network",
+    "security",
+    "ebpf"
+  ],
+  "style": "dark",
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "title": "System Overview",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "pepctl_uptime_seconds",
+          "legendFormat": "Uptime (seconds)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
         }
       },
-      {
-        "id": 2,
-        "title": "Active Policies",
-        "type": "stat",
-        "targets": [
-          {
-            "expr": "pepctl_policies_total",
-            "legendFormat": "Total Policies"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "thresholds": {
-              "steps": [
-                {
-                  "color": "blue",
-                  "value": null
-                }
-              ]
-            }
-          }
-        },
-        "gridPos": {
-          "h": 8,
-          "w": 6,
-          "x": 6,
-          "y": 0
-        }
-      },
-      {
-        "id": 3,
-        "title": "Packet Processing Rate",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(pepctl_daemon_packets_processed_total[5m])",
-            "legendFormat": "Packets/sec"
-          }
-        ],
-        "yAxes": [
-          {
-            "label": "Packets per second",
-            "min": 0
-          }
-        ],
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 12,
-          "y": 0
-        }
-      },
-      {
-        "id": 4,
-        "title": "Packet Statistics",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "pepctl_daemon_packets_processed_total",
-            "legendFormat": "Total Processed"
-          },
-          {
-            "expr": "pepctl_daemon_packets_allowed_total",
-            "legendFormat": "Allowed"
-          },
-          {
-            "expr": "pepctl_daemon_packets_blocked_total",
-            "legendFormat": "Blocked"
-          },
-          {
-            "expr": "pepctl_daemon_packets_logged_total",
-            "legendFormat": "Log Only"
-          },
-          {
-            "expr": "pepctl_daemon_packets_rate_limited_total",
-            "legendFormat": "Rate Limited"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "palette-classic"
-            },
-            "custom": {
-              "lineWidth": 2,
-              "fillOpacity": 10
-            }
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Total Processed"
-              },
-              "properties": [
-                {
-                  "id": "color",
-                  "value": {
-                    "mode": "fixed",
-                    "fixedColor": "#3498db"
-                  }
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Allowed"
-              },
-              "properties": [
-                {
-                  "id": "color",
-                  "value": {
-                    "mode": "fixed",
-                    "fixedColor": "#27ae60"
-                  }
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Blocked"
-              },
-              "properties": [
-                {
-                  "id": "color",
-                  "value": {
-                    "mode": "fixed",
-                    "fixedColor": "#e74c3c"
-                  }
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Log Only"
-              },
-              "properties": [
-                {
-                  "id": "color",
-                  "value": {
-                    "mode": "fixed",
-                    "fixedColor": "#f39c12"
-                  }
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Rate Limited"
-              },
-              "properties": [
-                {
-                  "id": "color",
-                  "value": {
-                    "mode": "fixed",
-                    "fixedColor": "#8e44ad"
-                  }
-                }
-              ]
-            }
-          ]
-        },
-        "yAxes": [
-          {
-            "label": "Packets",
-            "min": 0
-          }
-        ],
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 0,
-          "y": 8
-        }
-      },
-      {
-        "id": 5,
-        "title": "Data Throughput",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(pepctl_daemon_bytes_processed_total[5m])",
-            "legendFormat": "Bytes/sec"
-          }
-        ],
-        "yAxes": [
-          {
-            "label": "Bytes per second",
-            "min": 0
-          }
-        ],
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 12,
-          "y": 8
-        }
-      },
-      {
-        "id": 6,
-        "title": "eBPF Performance",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(pepctl_ebpf_packets_processed_total[5m])",
-            "legendFormat": "eBPF Packets/sec"
-          }
-        ],
-        "yAxes": [
-          {
-            "label": "Packets per second",
-            "min": 0
-          }
-        ],
-        "gridPos": {
-          "h": 8,
-          "w": 24,
-          "x": 0,
-          "y": 16
-        }
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 0
       }
-    ],
-    "time": {
-      "from": "now-1h",
-      "to": "now"
     },
-    "refresh": "5s"
-  }
+    {
+      "id": 2,
+      "title": "Active Policies",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "pepctl_policies_total",
+          "legendFormat": "Total Policies"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      }
+    },
+    {
+      "id": 3,
+      "title": "Packet Processing Rate",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(pepctl_daemon_packets_processed_total[5m])",
+          "legendFormat": "Packets/sec"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Packets per second",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      }
+    },
+    {
+      "id": 4,
+      "title": "Packet Statistics",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "pepctl_daemon_packets_processed_total",
+          "legendFormat": "Total Processed"
+        },
+        {
+          "expr": "pepctl_daemon_packets_allowed_total",
+          "legendFormat": "Allowed"
+        },
+        {
+          "expr": "pepctl_daemon_packets_blocked_total",
+          "legendFormat": "Blocked"
+        },
+        {
+          "expr": "pepctl_daemon_packets_logged_total",
+          "legendFormat": "Log Only"
+        },
+        {
+          "expr": "pepctl_daemon_packets_rate_limited_total",
+          "legendFormat": "Rate Limited"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total Processed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3498db"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Allowed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#27ae60"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Blocked"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#e74c3c"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Log Only"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#f39c12"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Rate Limited"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8e44ad"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "yAxes": [
+        {
+          "label": "Packets",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      }
+    },
+    {
+      "id": 5,
+      "title": "Data Throughput",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(pepctl_daemon_bytes_processed_total[5m])",
+          "legendFormat": "Bytes/sec"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Bytes per second",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      }
+    },
+    {
+      "id": 6,
+      "title": "eBPF Performance",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(pepctl_ebpf_packets_processed_total[5m])",
+          "legendFormat": "eBPF Packets/sec"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Packets per second",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      }
+    }
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "refresh": "5s"
 }
