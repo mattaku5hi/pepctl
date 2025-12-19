@@ -9,6 +9,8 @@ on:
 jobs:
   build-test-package:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -55,3 +57,20 @@ jobs:
           name: pepctl-deb
           path: dist/*.deb
           if-no-files-found: error
+
+      - name: Prepare APT repository (flat)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          rm -rf apt-repo
+          mkdir -p apt-repo
+          cp -v dist/*.deb apt-repo/
+          (cd apt-repo && dpkg-scanpackages --multiversion . /dev/null > Packages)
+          gzip -9c apt-repo/Packages > apt-repo/Packages.gz
+
+      - name: Publish APT repository to GitHub Pages (gh-pages)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: apt-repo
