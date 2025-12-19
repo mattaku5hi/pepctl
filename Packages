@@ -7,10 +7,10 @@ Depends: libbpf1, libelf1, libboost-system1.83.0, libboost-filesystem1.83.0, lib
 Recommends: linux-tools-generic, bpftool
 Suggests: wireshark, tcpdump, netcat-openbsd
 Filename: ./pepctl_1.0.0-1_amd64.deb
-Size: 678808
-MD5sum: 9fdeee3f12fcfcef0b32809cb2fbef90
-SHA1: 129873be026f80c25b41b2100dfa9e12af430e25
-SHA256: 967e6cf779f79db55cb9f29231833e14796c07b26639d52b5ba427464dd66851
+Size: 678742
+MD5sum: 0bb8c155a3075b7728b0c3e0230e81bd
+SHA1: d74b5273afde39b9e0205f8969c0b91ce74eee28
+SHA256: c4f3923ec6d465dc08ab6024754205872cf2345cc2431772f0b8c512804f3ce0
 Section: net
 Priority: optional
 Homepage: https://github.com/pepctl/pepctl
