@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-test-package:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            clang \
+            llvm \
+            pkg-config \
+            git \
+            libbpf-dev \
+            libelf-dev \
+            libboost-all-dev \
+            nlohmann-json3-dev \
+            libspdlog-dev \
+            libfmt-dev \
+            libsystemd-dev \
+            libgtest-dev \
+            googletest \
+            dpkg-dev \
+            debhelper \
+            fakeroot
+
+      - name: Build
+        run: ./scripts/build.sh --clean --jobs 4
+
+      - name: Run tests
+        run: ctest --test-dir build-ninja-release --output-on-failure
+
+      - name: Build Debian package
+        run: ./scripts/package-deb.sh --fast --no-deps
+
+      - name: Upload Debian package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pepctl-deb
+          path: dist/*.deb
+          if-no-files-found: error
