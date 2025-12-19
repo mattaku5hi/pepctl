@@ -3,14 +3,14 @@ Version: 1.0.0-1
 Architecture: amd64
 Maintainer: PEPCTL Development Team <dev@pepctl.org>
 Installed-Size: 3652
-Depends: libbpf1, libelf1, libboost-system1.83.0, libboost-filesystem1.83.0, libboost-thread1.83.0, libboost-program-options1.83.0, libspdlog1, libfmt9, systemd, libc6, libstdc++6
+Depends: libbpf1, libelf1, libboost-system1.83.0, libboost-filesystem1.83.0, libboost-thread1.83.0, libboost-program-options1.83.0, libspdlog1.12 | libspdlog1, libfmt9 | libfmt8, systemd, libc6, libstdc++6
 Recommends: linux-tools-generic, bpftool
 Suggests: wireshark, tcpdump, netcat-openbsd
 Filename: ./pepctl_1.0.0-1_amd64.deb
-Size: 678314
-MD5sum: 5509fd69749feaed80304f0565752046
-SHA1: 22fb2ab79f5c07cbb568aa4c73eb1fb14f88f240
-SHA256: 17eaa699f8fdd62f26b85fb287d2e78d7527ee359d0971fe40bb6640badef1c9
+Size: 678448
+MD5sum: ff12243f550c36cb15ed202cac7de4f7
+SHA1: 8c9e797ef3411003ec0cd3c46bab1ee6cc55c147
+SHA256: 3e8b38e04b6e1fbd8325f16cc27d25364d3c7511741a486b0a5146df8d858553
 Section: net
 Priority: optional
 Homepage: https://github.com/pepctl/pepctl
