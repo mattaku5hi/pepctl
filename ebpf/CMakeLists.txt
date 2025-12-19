@@ -3,7 +3,14 @@
 cmake_minimum_required(VERSION 3.20)
 
 # Find required tools
-find_program(CLANG_EXECUTABLE clang REQUIRED)
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    set(CLANG_EXECUTABLE "${CMAKE_C_COMPILER}" CACHE FILEPATH "Clang executable to compile eBPF programs")
+else()
+    find_program(CLANG_EXECUTABLE clang)
+    if(NOT CLANG_EXECUTABLE)
+        message(FATAL_ERROR "clang not found. Install clang or configure the project with -DCMAKE_C_COMPILER=clang")
+    endif()
+endif()
 find_program(BPFTOOL_EXECUTABLE bpftool)
 
 # Architecture detection

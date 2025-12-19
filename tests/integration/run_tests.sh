@@ -6,8 +6,10 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PEPCTL_BIN="${SCRIPT_DIR}/../../build/pepctl"
-TEST_CLIENT="${SCRIPT_DIR}/../../build/tests/integration/pepctl_test_client"
+BUILD_DIR="${PEPCTL_BUILD_DIR:-${SCRIPT_DIR}/../../build-ninja}"
+PEPCTL_BIN="${BUILD_DIR}/src/pepctl"
+TEST_CLIENT="${BUILD_DIR}/tests/integration/pepctl_test_client"
+EBPF_OBJ="${BUILD_DIR}/ebpf/packet_filter.o"
 TEST_CONFIG="/tmp/pepctl_test_config.json"
 TEST_LOG="/tmp/pepctl_test.log"
 ADMIN_PORT=18080
@@ -75,7 +77,7 @@ cat > "$TEST_CONFIG" << EOF
 "daemon_mode": false,
 "enable_metrics": true,
 "policy_capacity": 1000,
-"ebpf_program_path": "${SCRIPT_DIR}/../../ebpf/packet_filter.o",
+"ebpf_program_path": "$EBPF_OBJ",
 "policy_cleanup_interval": 60
 }
 EOF
@@ -89,7 +91,7 @@ log_info "Starting pepctl daemon..."
 
 if [ ! -f "$PEPCTL_BIN" ]; then
 log_error "pepctl binary not found at $PEPCTL_BIN"
-log_info "Please build the project first: cd build && make"
+log_info "Please build the project first: cmake --preset clang-ninja-debug && cmake --build --preset build-debug"
 exit 1
 fi
 

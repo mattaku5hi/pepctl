@@ -7,9 +7,8 @@
 
 namespace pepctl {
 
-/*
-  Utility function implementations
-*/
+//
+//   Utility function implementations
 auto policyActionToString(PolicyAction action) -> std::string
 {
     switch(action)
@@ -107,9 +106,8 @@ auto uint32ToIpString(uint32_t ip) -> std::string
     return std::string(inet_ntoa(addr));
 }
 
-/*
-  NetworkAddress member functions
-*/
+//
+//   NetworkAddress member functions
 auto NetworkAddress::toString() const -> std::string
 {
     return uint32ToIpString(ip) + ":" + std::to_string(port);

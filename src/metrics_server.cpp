@@ -10,6 +10,7 @@
 #include <sstream>
 #include <thread>
 #include <unistd.h>
+#include <utility>
 
 #include "pepctl/ebpf_manager.h"
 #include "pepctl/logger.h"
@@ -25,10 +26,9 @@ using tcp = net::ip::tcp;
 namespace pepctl 
 {
 
-/*
-    Use enable_shared_from_this to allow shared_ptr to access the object's methods
-    We need this to provide safe asynnc operations
-*/
+//
+//     Use enable_shared_from_this to allow shared_ptr to access the object's methods
+//     We need this to provide safe asynnc operations
 class HttpSession : public std::enable_shared_from_this<HttpSession>
 {
   public:
@@ -57,10 +57,10 @@ class HttpSession : public std::enable_shared_from_this<HttpSession>
 
         m_stream.expires_after(std::chrono::seconds(30));
 
-        /* 
-            We create another HttpSession object consumer - shared pointer
-            to guarantee the object is alive before async read is completed
-        */
+        //
+        //             We create another HttpSession object consumer - shared pointer
+        //             to guarantee the object is alive before async read is completed
+        //
         http::async_read(m_stream,
                          m_buffer,
                          m_req,
@@ -78,11 +78,9 @@ class HttpSession : public std::enable_shared_from_this<HttpSession>
 
         if(ec.value() != 0)
         {
-            if(gLogger != nullptr)
-            {
-                gLogger->debug(LogContext(LogCategory::NETWORK).withField("error", ec.message()),
-                               "HTTP read error");
-            }
+            m_server->getLogger().debug(
+                LogContext(LogCategory::NETWORK).withField("error", ec.message()),
+                "HTTP read error");
             return;
         }
 
@@ -109,18 +107,16 @@ class HttpSession : public std::enable_shared_from_this<HttpSession>
 
         if(ec.value() != 0)
         {
-            if(gLogger != nullptr)
-            {
-                gLogger->debug(LogContext(LogCategory::NETWORK).withField("error", ec.message()),
-                               "HTTP write error");
-            }
+            m_server->getLogger().debug(
+                LogContext(LogCategory::NETWORK).withField("error", ec.message()),
+                "HTTP write error");
             return;
         }
 
-        /*
-            Whether to close connection after write
-            It's keep_alive option in the request HTTP header
-        */
+        //
+        //             Whether to close connection after write
+        //             It's keep_alive option in the request HTTP header
+        //
         if(response->need_eof())
         {
             return doClose();
@@ -136,10 +132,9 @@ class HttpSession : public std::enable_shared_from_this<HttpSession>
     }
 };
 
-/*
-    Listener class
-    This class is responsible for accepting incoming connections and creating HttpSession objects
-*/
+//
+//     Listener class
+//     This class is responsible for accepting incoming connections and creating HttpSession objects
 class Listener : public std::enable_shared_from_this<Listener>
 {
   public:
@@ -153,44 +148,36 @@ class Listener : public std::enable_shared_from_this<Listener>
         m_acceptor.open(endpoint.protocol(), ec);
         if(ec.value() != 0)
         {
-            if(gLogger != nullptr)
-            {
-                gLogger->error(LogContext(LogCategory::NETWORK).withField("error", ec.message()),
-                               "Failed to open acceptor");
-            }
+            m_server->getLogger().error(
+                LogContext(LogCategory::NETWORK).withField("error", ec.message()),
+                "Failed to open acceptor");
             return;
         }
 
         m_acceptor.set_option(net::socket_base::reuse_address(true), ec);
         if(ec.value() != 0)
         {
-            if(gLogger != nullptr)
-            {
-                gLogger->error(LogContext(LogCategory::NETWORK).withField("error", ec.message()),
-                               "Failed to set socket options");
-            }
+            m_server->getLogger().error(
+                LogContext(LogCategory::NETWORK).withField("error", ec.message()),
+                "Failed to set socket options");
             return;
         }
 
         m_acceptor.bind(endpoint, ec);
         if(ec.value() != 0)
         {
-            if(gLogger != nullptr)
-            {
-                gLogger->error(LogContext(LogCategory::NETWORK).withField("error", ec.message()),
-                               "Failed to bind acceptor");
-            }
+            m_server->getLogger().error(
+                LogContext(LogCategory::NETWORK).withField("error", ec.message()),
+                "Failed to bind acceptor");
             return;
         }
 
         m_acceptor.listen(net::socket_base::max_listen_connections, ec);
         if(ec)
         {
-            if(gLogger != nullptr)
-            {
-                gLogger->error(LogContext(LogCategory::NETWORK).withField("error", ec.message()),
-                               "Failed to listen");
-            }
+            m_server->getLogger().error(
+                LogContext(LogCategory::NETWORK).withField("error", ec.message()),
+                "Failed to listen");
             return;
         }
     }
@@ -215,11 +202,9 @@ class Listener : public std::enable_shared_from_this<Listener>
     {
         if(ec.value() != 0)
         {
-            if(gLogger != nullptr)
-            {
-                gLogger->debug(LogContext(LogCategory::NETWORK).withField("error", ec.message()),
-                               "Accept error");
-            }
+            m_server->getLogger().debug(
+                LogContext(LogCategory::NETWORK).withField("error", ec.message()),
+                "Accept error");
         }
         else
         {
@@ -230,14 +215,14 @@ class Listener : public std::enable_shared_from_this<Listener>
     }
 };
 
-/*
-    MetricsServer class
-    This class is responsible for serving metrics and health checks
-*/
-MetricsServer::MetricsServer() :
+//
+//     MetricsServer class
+//     This class is responsible for serving metrics and health checks
+MetricsServer::MetricsServer(std::shared_ptr<Logger> logger) :
     m_ioc(),
     m_acceptor(m_ioc),
     m_running(false),
+    m_logger(std::move(logger)),
     m_port(8080),
     m_bindAddress("0.0.0.0"),
     m_metricsPrefix("pepctl_"),
@@ -255,6 +240,10 @@ MetricsServer::MetricsServer() :
     m_ebpfManager(nullptr),
     m_daemonMetrics(nullptr)
 {
+    if(m_logger == nullptr)
+    {
+        throw std::invalid_argument("Logger must not be null");
+    }
     // Initialize basic structures
 }
 
@@ -268,13 +257,10 @@ auto MetricsServer::initialize(uint16_t port, const std::string& bind_address) -
     m_port = port;
     m_bindAddress = bind_address;
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::SYSTEM)
-                          .withField("port", std::to_string(port))
-                          .withField("address", bind_address),
-                      "Metrics server initialized");
-    }
+    m_logger->info(LogContext(LogCategory::SYSTEM)
+                       .withField("port", std::to_string(port))
+                       .withField("address", bind_address),
+                   "Metrics server initialized");
 
     return true;
 }
@@ -294,9 +280,9 @@ auto MetricsServer::start() -> bool
         m_listener = std::make_shared<Listener>(m_ioc, tcp::endpoint{address, port}, this);
         m_listener->run();
 
-        /*
-            Start the IO context in a separate thread
-        */
+        //
+        //             Start the IO context in a separate thread
+        //
         m_serverThread = std::thread([this]() { 
             try
             {
@@ -304,38 +290,29 @@ auto MetricsServer::start() -> bool
             }
             catch(const std::exception& e)
             {
-                if(gLogger != nullptr)
-                {
-                    gLogger->error(LogContext(LogCategory::SYSTEM).withField("error", e.what()),
-                                   "Failed to run metrics server");
-                }
+                m_logger->error(LogContext(LogCategory::SYSTEM).withField("error", e.what()),
+                                "Failed to run metrics server");
             }
         });
 
-        /*
-            Start metrics update timer
-        */
+        //
+        //             Start metrics update timer
+        //
         startUpdateTimer();
 
         m_running.store(true);
 
-        if(gLogger != nullptr)
-        {
-            gLogger->info(LogContext(LogCategory::SYSTEM)
-                              .withField("port", std::to_string(m_port))
-                              .withField("address", m_bindAddress),
-                          "Metrics server started");
-        }
+        m_logger->info(LogContext(LogCategory::SYSTEM)
+                           .withField("port", std::to_string(m_port))
+                           .withField("address", m_bindAddress),
+                       "Metrics server started");
 
         return true;
     }
     catch(const std::exception& e)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(LogContext(LogCategory::SYSTEM).withField("error", e.what()),
-                           "Failed to start metrics server");
-        }
+        m_logger->error(LogContext(LogCategory::SYSTEM).withField("error", e.what()),
+                        "Failed to start metrics server");
         return false;
     }
 }
@@ -347,82 +324,56 @@ void MetricsServer::stop()
         return;
     }
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::SYSTEM), "MetricsServer::stop() - begin");
-    }
+    m_logger->info(LogContext(LogCategory::SYSTEM), "MetricsServer::stop() - begin");
 
-    /*
-        Cancel update timer to ensure no pending async handlers
-    */
+    //
+    //         Cancel update timer to ensure no pending async handlers
+    //
     boost::system::error_code ec;
     m_updateTimer.cancel(ec);
-    if(gLogger != nullptr)
-    {
-        gLogger->debug(LogContext(LogCategory::SYSTEM),
-                       "MetricsServer::stop() - updateTimer canceled");
-    }
+    m_logger->debug(LogContext(LogCategory::SYSTEM), "MetricsServer::stop() - updateTimer canceled");
 
-    /*
-        Reset listener to cancel all async operations before stopping io_context
-    */
+    //
+    //         Reset listener to cancel all async operations before stopping io_context
+    //
     m_listener.reset();
-    if(gLogger != nullptr)
-    {
-        gLogger->debug(LogContext(LogCategory::SYSTEM), "MetricsServer::stop() - listener reset");
-    }
+    m_logger->debug(LogContext(LogCategory::SYSTEM), "MetricsServer::stop() - listener reset");
 
-    /*
-        Stop running flags
-    */
+    //
+    //         Stop running flags
+    //
     m_running.store(false);
     m_updateRunning.store(false);
 
-    /*
-        Stop IO context
-    */
+    //
+    //         Stop IO context
+    //
     m_ioc.stop();
-    if(gLogger != nullptr)
-    {
-        gLogger->debug(LogContext(LogCategory::SYSTEM),
-                       "MetricsServer::stop() - io_context stopped");
-    }
+    m_logger->debug(LogContext(LogCategory::SYSTEM), "MetricsServer::stop() - io_context stopped");
 
-    /*
-        Wait for IO thread to finish
-    */
+    //
+    //         Wait for IO thread to finish
+    //
     if(m_serverThread.joinable() == true)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->info(LogContext(LogCategory::SYSTEM), "Joining metrics server IO thread...");
-        }
+        m_logger->info(LogContext(LogCategory::SYSTEM), "Joining metrics server IO thread...");
         m_serverThread.join();
-        if(gLogger != nullptr)
-        {
-            gLogger->info(LogContext(LogCategory::SYSTEM), "Metrics server IO thread joined");
-        }
+        m_logger->info(LogContext(LogCategory::SYSTEM), "Metrics server IO thread joined");
     }
 
-    /*
-        Now safe to reset io_context
-    */
+    //
+    //         Now safe to reset io_context
+    //
     m_ioc.reset();
-    if(gLogger != nullptr)
-    {
-        gLogger->debug(LogContext(LogCategory::SYSTEM), "MetricsServer::stop() - io_context reset");
-    }
+    m_logger->debug(LogContext(LogCategory::SYSTEM), "MetricsServer::stop() - io_context reset");
 
-    /*
-        Reset thread object to avoid accidental reuse
-    */
+    //
+    //         Reset thread object to avoid accidental reuse
+    //
     m_serverThread = std::thread();
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::SYSTEM), "Metrics server stopped");
-        gLogger->info(LogContext(LogCategory::SYSTEM), "MetricsServer::stop() - end");
-    }
+    m_logger->info(LogContext(LogCategory::SYSTEM), "Metrics server stopped");
+    m_logger->info(LogContext(LogCategory::SYSTEM), "MetricsServer::stop() - end");
 }
 
 void MetricsServer::registerMetric(const std::string& name,
@@ -450,9 +401,9 @@ void MetricsServer::setGauge(const std::string& name,
     }
     else
     {
-        /*
-            Auto-register gauge if not found
-        */
+        //
+        //             Auto-register gauge if not found
+        //
         MetricEntry entry(MetricType::GAUGE, name, "");
         entry.value = value;
         entry.labels = labels;
@@ -476,9 +427,9 @@ void MetricsServer::incrementCounter(const std::string& name,
     }
     else
     {
-        /*
-            Auto-register counter if not found
-        */
+        //
+        //             Auto-register counter if not found
+        //
         MetricEntry entry(MetricType::COUNTER, name, "");
         entry.value = value;
         entry.labels = labels;
@@ -496,18 +447,18 @@ void MetricsServer::setCounter(const std::string& name,
     auto it = m_metrics.find(name);
     if(it != m_metrics.end())
     {
-        /*
-            Preserve the original type (should be COUNTER)
-        */
+        //
+        //             Preserve the original type (should be COUNTER)
+        //
         it->second.value = value;
         it->second.labels = labels;
         it->second.timestamp = std::chrono::system_clock::now();
     }
     else
     {
-        /*
-            Auto-register counter if not found
-        */
+        //
+        //             Auto-register counter if not found
+        //
         MetricEntry entry(MetricType::COUNTER, name, "");
         entry.value = value;
         entry.labels = labels;
@@ -544,63 +495,60 @@ void MetricsServer::registerStaticEndpoint(const std::string& path,
 
 void MetricsServer::setupDefaultEndpoints()
 {
-    /*
-        Register default metrics first
-    */
+    //
+    //         Register default metrics first
+    //
     registerDefaultMetrics();
 
-    /*
-        Metrics endpoint
-    */
+    //
+    //         Metrics endpoint
+    //
     registerEndpoint("/metrics", "GET", [this](const HttpRequestContext&) {
         return handleMetrics(HttpRequestContext{});
     });
 
-    /*
-        Health check endpoint
-    */
-    registerEndpoint("/health", "GET", [this](const HttpRequestContext&) {
+    //
+    //         Health check endpoint
+    //
+    registerEndpoint("/health", "GET", [](const HttpRequestContext&) {
         return handleHealth(HttpRequestContext{});
     });
 
-    /*
-        Stats endpoint
-    */
+    //
+    //         Stats endpoint
+    //
     registerEndpoint("/stats", "GET", [this](const HttpRequestContext&) {
         return handleStats(HttpRequestContext{});
     });
 
-    /*
-        Policy info endpoint (GET)
-    */
+    //
+    //         Policy info endpoint (GET)
+    //
     registerEndpoint("/policies", "GET", [this](const HttpRequestContext&) {
         return handlePolicies(HttpRequestContext{});
     });
 
-    /*
-        Policy management endpoint (POST)
-    */
+    //
+    //         Policy management endpoint (POST)
+    //
     registerEndpoint("/policies", "POST", [this](const HttpRequestContext& ctx) {
         return handlePolicyAdd(ctx);
     });
 
-    /*
-        Policy removal endpoint (DELETE)
-    */
+    //
+    //         Policy removal endpoint (DELETE)
+    //
     registerEndpoint("/policies", "DELETE", [this](const HttpRequestContext& ctx) {
         return handlePolicyRemove(ctx);
     });
 
-    /*
-        Reset statistics endpoint (POST)
-    */
+    //
+    //         Reset statistics endpoint (POST)
+    //
     registerEndpoint(
         "/reset", "POST", [this](const HttpRequestContext& ctx) { return handleReset(ctx); });
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::SYSTEM), "Default endpoints configured");
-    }
+    m_logger->info(LogContext(LogCategory::SYSTEM), "Default endpoints configured");
 }
 
 void MetricsServer::processHttpRequest(const http::request<http::string_body>& req,
@@ -609,28 +557,25 @@ void MetricsServer::processHttpRequest(const http::request<http::string_body>& r
     std::string target = std::string(req.target());
     std::string method = std::string(req.method_string());
 
-    /*
-        Remove query parameters for endpoint matching
-    */
+    //
+    //         Remove query parameters for endpoint matching
+    //
     auto queryPos = target.find('?');
     if(queryPos != std::string::npos)
     {
         target = target.substr(0, queryPos);
     }
 
-    /*
-        Log request
-    */
-    if(gLogger != nullptr)
-    {
-        gLogger->debug(
-            LogContext(LogCategory::NETWORK).withField("method", method).withField("path", target),
-            "HTTP request received");
-    }
+    //
+    //         Log request
+    //
+    m_logger->debug(
+        LogContext(LogCategory::NETWORK).withField("method", method).withField("path", target),
+        "HTTP request received");
 
-    /*
-        Find endpoint handler
-    */
+    //
+    //         Find endpoint handler
+    //
     {
         std::lock_guard<std::mutex> lock(m_endpointsMutex);
         std::string key = method + " " + target;  // Include method in lookup key
@@ -646,11 +591,8 @@ void MetricsServer::processHttpRequest(const http::request<http::string_body>& r
             }
             catch(const std::exception& e)
             {
-                if(gLogger != nullptr)
-                {
-                    gLogger->error(LogContext(LogCategory::NETWORK).withField("error", e.what()),
-                                   "Error handling request");
-                }
+                m_logger->error(LogContext(LogCategory::NETWORK).withField("error", e.what()),
+                                "Error handling request");
                 createErrorResponse(
                     http::status::internal_server_error, "Internal server error", res);
                 return;
@@ -658,506 +600,367 @@ void MetricsServer::processHttpRequest(const http::request<http::string_body>& r
         }
     }
 
-    /*
-        Not found
-    */
+    //
+    //         Not found
+    //
     createErrorResponse(http::status::not_found, "Endpoint not found", res);
 }
 
-HttpRequestContext MetricsServer::parseRequest(const http::request<http::string_body>& req)
+auto MetricsServer::parseRequest(const http::request<http::string_body>& req) -> HttpRequestContext
 {
     HttpRequestContext ctx;
     ctx.method = std::string(req.method_string());
     ctx.target = std::string(req.target());
     ctx.body = req.body();
 
-    /*
-        Parse headers
-    */
-    for(auto const& field : req)
+    for(const auto& field : req)
     {
-        ctx.headers[std::string(field.name_string())] = std::string(field.value());
+        ctx.headers.emplace(std::string(field.name_string()), std::string(field.value()));
     }
 
-    /*
-        Parse query parameters
-    */
     ctx.query_params = parseQueryParams(ctx.target);
-
     return ctx;
 }
 
-void MetricsServer::buildResponse(const HttpResponse& response,
-                                  http::response<http::string_body>& res)
+void MetricsServer::buildResponse(const HttpResponse& response, http::response<http::string_body>& res)
 {
     res.result(response.status);
-    res.set(http::field::server, "PEPCTL/1.0");
+    res.set(http::field::server, "pepctl");
     res.set(http::field::content_type, response.contentType);
-    res.body() = response.body;
 
-    /*
-        Add custom headers
-    */
-    for(const auto& [key, value] : response.headers)
+    for(const auto& [k, v] : response.headers)
     {
-        res.set(key, value);
+        res.set(k, v);
     }
 
+    res.body() = response.body;
     res.prepare_payload();
 }
 
-std::unordered_map<std::string, std::string> MetricsServer::parseQueryParams(
-    const std::string& target)
+auto MetricsServer::parseQueryParams(const std::string& target)
+    -> std::unordered_map<std::string, std::string>
 {
     std::unordered_map<std::string, std::string> params;
-
-    auto queryPos = target.find('?');
-    if(queryPos == std::string::npos)
+    auto pos = target.find('?');
+    if(pos == std::string::npos)
     {
         return params;
     }
 
-    std::string query = target.substr(queryPos + 1);
-    std::istringstream ss(query);
-    std::string param;
-
-    while(std::getline(ss, param, '&'))
+    std::string query = target.substr(pos + 1);
+    std::size_t start = 0;
+    while(start < query.size())
     {
-        auto eqPos = param.find('=');
-        if(eqPos != std::string::npos)
+        auto amp = query.find('&', start);
+        std::string token = (amp == std::string::npos) ? query.substr(start)
+                                                        : query.substr(start, amp - start);
+        auto eq = token.find('=');
+        if(eq != std::string::npos)
         {
-            std::string key = param.substr(0, eqPos);
-            std::string value = param.substr(eqPos + 1);
-            params[key] = value;
+            params.emplace(token.substr(0, eq), token.substr(eq + 1));
         }
+        else if(token.empty() == false)
+        {
+            params.emplace(token, "");
+        }
+
+        if(amp == std::string::npos)
+        {
+            break;
+        }
+        start = amp + 1;
     }
 
     return params;
 }
 
-HttpResponse MetricsServer::handleMetrics(const HttpRequestContext& /*unused*/)
+auto MetricsServer::handleMetrics(const HttpRequestContext& ctx) -> HttpResponse
 {
-    std::ostringstream oss;
+    boost::ignore_unused(ctx);
 
-    /*
-        Update metrics before serving
-    */
-    updateSystemMetrics();
+    std::ostringstream oss;
 
     std::lock_guard<std::mutex> lock(m_metricsMutex);
-
-    /*
-        Write metric definitions and values
-    */
     for(const auto& [name, entry] : m_metrics)
     {
-        oss << formatMetricEntry(entry) << "\n";
+        if(entry.help.empty() == false)
+        {
+            oss << "# HELP " << name << ' ' << entry.help << '\n';
+        }
+
+        switch(entry.type)
+        {
+            case MetricType::COUNTER:
+                oss << "# TYPE " << name << " counter\n";
+                break;
+            case MetricType::GAUGE:
+                oss << "# TYPE " << name << " gauge\n";
+                break;
+            case MetricType::HISTOGRAM:
+                oss << "# TYPE " << name << " histogram\n";
+                break;
+            case MetricType::SUMMARY:
+                oss << "# TYPE " << name << " summary\n";
+                break;
+        }
+
+        oss << name;
+        if(entry.labels.empty() == false)
+        {
+            oss << '{';
+            bool first = true;
+            for(const auto& [k, v] : entry.labels)
+            {
+                if(first == false)
+                {
+                    oss << ',';
+                }
+                first = false;
+                oss << k << "=\"" << escapeLabelValue(v) << "\"";
+            }
+            oss << '}';
+        }
+        oss << ' ' << entry.value << '\n';
     }
 
-    return HttpResponse(http::status::ok, "text/plain; version=0.0.4; charset=utf-8", oss.str());
+    return HttpResponse(http::status::ok, "text/plain; version=0.0.4", oss.str());
 }
 
-HttpResponse MetricsServer::handleHealth(const HttpRequestContext& /*unused*/)
+auto MetricsServer::handleHealth(const HttpRequestContext& ctx) -> HttpResponse
 {
-    return HttpResponse(http::status::ok,
-                        "application/json",
-                        R"({"status":"healthy","service":"pepctl","version":"1.0"})");
+    boost::ignore_unused(ctx);
+    nlohmann::json j;
+    j["status"] = "ok";
+    j["timestamp"] = getCurrentTimestampIso();
+    j["uptime_seconds"] = getUptimeSeconds();
+    return HttpResponse(http::status::ok, "application/json", j.dump());
 }
 
-HttpResponse MetricsServer::handleStats(const HttpRequestContext& /*unused*/)
+auto MetricsServer::handleStats(const HttpRequestContext& ctx) -> HttpResponse
 {
-    std::ostringstream oss;
+    boost::ignore_unused(ctx);
 
-    oss << "{\n";
-    oss << "  \"service\": \"pepctl\",\n";
-    oss << "  \"version\": \"1.0\",\n";
-    oss << "  \"uptime_seconds\": " << getUptimeSeconds() << ",\n";
+    nlohmann::json j;
+    j["service"] = "pepctl";
+    j["version"] = pepctl::version;
+    j["uptime_seconds"] = getUptimeSeconds();
+    j["timestamp"] = getCurrentTimestampIso();
 
-    /*
-        Policy engine stats
-    */
-    if(m_policyEngine != nullptr)
-    {
-        oss << "  \"policies\": {\n";
-        oss << "    \"total_count\": " << PolicyEngine::getPolicyCount() << "\n";
-        oss << "  },\n";
-    }
-
-    /*
-        eBPF manager stats
-    */
-    if(m_ebpfManager != nullptr)
-    {
-        auto ebpfStats = m_ebpfManager->getStats();
-        oss << "  \"ebpf\": {\n";
-        oss << "    \"packets_processed\": " << ebpfStats.packets_processed << "\n";
-        oss << "  },\n";
-    }
-
-    /*
-        Daemon metrics
-    */
     if(m_daemonMetrics != nullptr)
     {
-        oss << "  \"daemon\": {\n";
-        oss << "    \"packets_processed\": " << m_daemonMetrics->packetsProcessed.load() << ",\n";
-        oss << "    \"packets_allowed\": " << m_daemonMetrics->packetsAllowed.load() << ",\n";
-        oss << "    \"packets_blocked\": " << m_daemonMetrics->packetsBlocked.load() << ",\n";
-        oss << "    \"packets_logged\": " << m_daemonMetrics->packetsLogged.load() << ",\n";
-        oss << "    \"packets_rate_limited\": " << m_daemonMetrics->packetsRateLimited.load()
-            << ",\n";
-        oss << "    \"bytes_processed\": " << m_daemonMetrics->bytesProcessed.load() << "\n";
-        oss << "  }\n";
+        nlohmann::json d;
+        d["packets_processed"] = m_daemonMetrics->packetsProcessed.load();
+        d["packets_allowed"] = m_daemonMetrics->packetsAllowed.load();
+        d["packets_blocked"] = m_daemonMetrics->packetsBlocked.load();
+        d["packets_logged"] = m_daemonMetrics->packetsLogged.load();
+        d["packets_rate_limited"] = m_daemonMetrics->packetsRateLimited.load();
+        d["bytes_processed"] = m_daemonMetrics->bytesProcessed.load();
+        j["daemon"] = d;
     }
-    else
-    {
-        oss << "  \"daemon\": null\n";
-    }
-
-    oss << "}\n";
-
-    return HttpResponse(http::status::ok, "application/json", oss.str());
-}
-
-HttpResponse MetricsServer::handlePolicies(const HttpRequestContext& /*unused*/)
-{
-    std::string jsonContent = "[]";
 
     if(m_policyEngine != nullptr)
     {
-        jsonContent = PolicyEngine::exportPoliciesToJson();
+        nlohmann::json p;
+        p["total_count"] = PolicyEngine::getPolicyCount();
+        j["policies"] = p;
     }
 
-    return HttpResponse(http::status::ok, "application/json", jsonContent);
-}
-
-void MetricsServer::createErrorResponse(http::status status,
-                                        const std::string& message,
-                                        http::response<http::string_body>& res)
-{
-    res.result(status);
-    res.set(http::field::server, "PEPCTL/1.0");
-    res.set(http::field::content_type, "text/plain");
-    res.body() = message;
-    res.prepare_payload();
-}
-
-void MetricsServer::updateSystemMetrics()
-{
-    if(m_running.load() == false)
-    {
-        return;
-    }
-
-    /*
-        Update system metrics
-    */
-    setGauge("pepctl_uptime_seconds", getUptimeSeconds());
-
-    /*
-        Update policy engine metrics
-    */
-    if(m_policyEngine != nullptr)
-    {
-        setGauge("pepctl_policies_total", static_cast<double>(PolicyEngine::getPolicyCount()));
-    }
-
-    /*
-        Update eBPF manager metrics and sync with daemon metrics
-    */
     if(m_ebpfManager != nullptr)
     {
         auto stats = m_ebpfManager->getStats();
-        setCounter("pepctl_ebpf_packets_processed_total",
-                   static_cast<double>(stats.packets_processed));
+        nlohmann::json e;
+        e["packets_processed"] = stats.packets_processed;
+        e["packets_allowed"] = stats.packets_allowed;
+        e["packets_blocked"] = stats.packets_blocked;
+        e["packets_logged"] = stats.packets_logged;
+        e["packets_rate_limited"] = stats.packets_rate_limited;
+        e["map_updates"] = stats.map_updates;
+        e["map_lookup_errors"] = stats.map_lookup_errors;
+        j["ebpf"] = e;
+    }
 
-        /*
-            Sync daemon metrics with eBPF statistics (eBPF is authoritative)
-        */
-        if(m_daemonMetrics != nullptr)
+    return HttpResponse(http::status::ok, "application/json", j.dump());
+}
+
+auto MetricsServer::handlePolicies(const HttpRequestContext& ctx) -> HttpResponse
+{
+    if(ctx.method != "GET")
+    {
+        return HttpResponse(http::status::method_not_allowed,
+                            "application/json",
+                            R"({"error":"Method not allowed"})");
+    }
+
+    return HttpResponse(http::status::ok, "application/json", PolicyEngine::exportPoliciesToJson());
+}
+
+auto MetricsServer::handlePolicyAdd(const HttpRequestContext& ctx) -> HttpResponse
+{
+    if(ctx.method != "POST")
+    {
+        return HttpResponse(http::status::method_not_allowed,
+                            "application/json",
+                            R"({"error":"Method not allowed"})");
+    }
+
+    if(ctx.body.empty())
+    {
+        return HttpResponse(http::status::bad_request,
+                            "application/json",
+                            R"({"error":"Empty request body"})");
+    }
+
+    if(PolicyEngine::loadPoliciesFromJson(ctx.body) == false)
+    {
+        return HttpResponse(http::status::bad_request,
+                            "application/json",
+                            R"({"error":"Failed to parse policies"})");
+    }
+
+    if(m_ebpfManager != nullptr)
+    {
+        auto policies = PolicyEngine::getAllPolicies();
+        (void)m_ebpfManager->updatePolicyMap(policies);
+    }
+
+    nlohmann::json j;
+    j["status"] = "success";
+    j["policy_count"] = PolicyEngine::getPolicyCount();
+    j["timestamp"] = getCurrentTimestampIso();
+    return HttpResponse(http::status::ok, "application/json", j.dump());
+}
+
+auto MetricsServer::handlePolicyRemove(const HttpRequestContext& ctx) -> HttpResponse
+{
+    if(ctx.method != "DELETE")
+    {
+        return HttpResponse(http::status::method_not_allowed,
+                            "application/json",
+                            R"({"error":"Method not allowed"})");
+    }
+
+    std::string policy_id;
+    auto it = ctx.query_params.find("id");
+    if(it != ctx.query_params.end())
+    {
+        policy_id = it->second;
+    }
+    else
+    {
+        try
         {
-            m_daemonMetrics->packetsProcessed.store(stats.packets_processed);
-            m_daemonMetrics->packetsAllowed.store(stats.packets_allowed);
-            m_daemonMetrics->packetsBlocked.store(stats.packets_blocked);
-            m_daemonMetrics->packetsLogged.store(stats.packets_logged);
-            m_daemonMetrics->packetsRateLimited.store(stats.packets_rate_limited);
+            if(ctx.body.empty() == false)
+            {
+                auto j = nlohmann::json::parse(ctx.body);
+                if(j.contains("id"))
+                {
+                    policy_id = j["id"].get<std::string>();
+                }
+            }
+        }
+        catch(const std::exception&)
+        {
         }
     }
 
-    /*
-        Update daemon metrics (now synced with eBPF)
-    */
-    if(m_daemonMetrics != nullptr)
+    if(policy_id.empty())
     {
-        setCounter("pepctl_daemon_packets_processed_total",
-                   static_cast<double>(m_daemonMetrics->packetsProcessed.load()));
-        setCounter("pepctl_daemon_packets_allowed_total",
-                   static_cast<double>(m_daemonMetrics->packetsAllowed.load()));
-        setCounter("pepctl_daemon_packets_blocked_total",
-                   static_cast<double>(m_daemonMetrics->packetsBlocked.load()));
-        setCounter("pepctl_daemon_packets_logged_total",
-                   static_cast<double>(m_daemonMetrics->packetsLogged.load()));
-        setCounter("pepctl_daemon_packets_rate_limited_total",
-                   static_cast<double>(m_daemonMetrics->packetsRateLimited.load()));
-        setCounter("pepctl_daemon_bytes_processed_total",
-                   static_cast<double>(m_daemonMetrics->bytesProcessed.load()));
+        return HttpResponse(http::status::bad_request,
+                            "application/json",
+                            R"({"error":"Missing policy id"})");
     }
+
+    if(PolicyEngine::removePolicy(policy_id) == false)
+    {
+        return HttpResponse(http::status::not_found,
+                            "application/json",
+                            R"({"error":"Policy not found"})");
+    }
+
+    if(m_ebpfManager != nullptr)
+    {
+        auto policies = PolicyEngine::getAllPolicies();
+        (void)m_ebpfManager->updatePolicyMap(policies);
+    }
+
+    nlohmann::json j;
+    j["status"] = "success";
+    j["policy_count"] = PolicyEngine::getPolicyCount();
+    j["timestamp"] = getCurrentTimestampIso();
+    return HttpResponse(http::status::ok, "application/json", j.dump());
 }
 
 void MetricsServer::startUpdateTimer()
 {
-    if(m_running.load() == false)
+    if(m_updateRunning.exchange(true) == true)
     {
         return;
     }
 
-    m_updateRunning.store(true);
     m_updateTimer.expires_after(m_updateInterval);
-    m_updateTimer.async_wait([this](boost::system::error_code ec) {
-        if(ec.value() == 0 && m_updateRunning.load() == true)
+    m_updateTimer.async_wait([this](const boost::system::error_code& ec) {
+        if(ec)
         {
-            updateSystemMetrics();
-            startUpdateTimer();  // Schedule next update
+            m_updateRunning.store(false);
+            return;
         }
+        if(m_running.load() == false)
+        {
+            m_updateRunning.store(false);
+            return;
+        }
+
+        updateSystemMetrics();
+        updatePolicyMetrics();
+
+        m_updateRunning.store(false);
+        startUpdateTimer();
     });
 }
 
-std::string MetricsServer::formatMetricEntry(const MetricEntry& entry)
+void MetricsServer::createErrorResponse(http::status status,
+                                       const std::string& message,
+                                       http::response<http::string_body>& res)
 {
-    std::ostringstream oss;
-
-    /*
-        Write help
-    */
-    if(entry.help.empty() == false)
-    {
-        oss << "# HELP " << entry.name << " " << entry.help << "\n";
-    }
-
-    /*
-        Write type
-    */
-    oss << "# TYPE " << entry.name << " ";
-    switch(entry.type)
-    {
-        case MetricType::COUNTER:
-            oss << "counter";
-            break;
-        case MetricType::GAUGE:
-            oss << "gauge";
-            break;
-        case MetricType::HISTOGRAM:
-            oss << "histogram";
-            break;
-        case MetricType::SUMMARY:
-            oss << "summary";
-            break;
-    }
-    oss << "\n";
-
-    /*
-        Write value
-    */
-    oss << entry.name;
-    if(entry.labels.empty() == false)
-    {
-        oss << "{";
-        bool first = true;
-        for(const auto& [key, value] : entry.labels)
-        {
-            if(first == false)
-            {
-                oss << ",";
-            }
-            oss << key << "=\"" << escapeLabelValue(value) << "\"";
-            first = false;
-        }
-        oss << "}";
-    }
-    oss << " " << std::fixed << std::setprecision(6) << entry.value;
-
-    return oss.str();
-}
-
-std::string MetricsServer::escapeLabelValue(const std::string& value)
-{
-    std::string escaped = value;
-    /*
-        Simple escaping - replace quotes and backslashes
-    */
-    size_t pos = 0;
-    while((pos = escaped.find('"', pos)) != std::string::npos)
-    {
-        escaped.replace(pos, 1, "\\\"");
-        pos += 2;
-    }
-    pos = 0;
-    while((pos = escaped.find('\\', pos)) != std::string::npos)
-    {
-        escaped.replace(pos, 1, "\\\\");
-        pos += 2;
-    }
-    return escaped;
+    nlohmann::json j;
+    j["error"] = message;
+    res.result(status);
+    res.set(http::field::content_type, "application/json");
+    res.body() = j.dump();
+    res.prepare_payload();
 }
 
 double MetricsServer::getUptimeSeconds()
 {
-    static auto startTime = std::chrono::steady_clock::now();
+    static const auto start = std::chrono::steady_clock::now();
     auto now = std::chrono::steady_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime);
-    return static_cast<double>(duration.count()) / 1000.0;
+    return std::chrono::duration_cast<std::chrono::duration<double>>(now - start).count();
 }
 
-HttpResponse MetricsServer::handleInfo(const HttpRequestContext& /*unused*/)
+auto MetricsServer::escapeLabelValue(const std::string& value) -> std::string
 {
-    std::ostringstream oss;
-
-    oss << "{\n";
-    oss << "  \"service\": \"pepctl\",\n";
-    oss << "  \"version\": \"1.0\",\n";
-    oss << "  \"build_time\": \"" << __DATE__ << " " << __TIME__ << "\",\n";
-    oss << "  \"uptime_seconds\": " << getUptimeSeconds() << ",\n";
-    oss << "  \"metrics_endpoint\": \"/metrics\",\n";
-    oss << "  \"health_endpoint\": \"/health\",\n";
-    oss << "  \"policies_endpoint\": \"/policies\"\n";
-    oss << "}\n";
-
-    return HttpResponse(http::status::ok, "application/json", oss.str());
-}
-
-HttpResponse MetricsServer::handlePolicyAdd(const HttpRequestContext& ctx)
-{
-    if(ctx.method != "POST")
+    std::string out;
+    out.reserve(value.size());
+    for(const char c : value)
     {
-        return HttpResponse(
-            http::status::method_not_allowed,
-            "application/json",
-            R"({"error":"Method not allowed","message":"Use POST to add policies"})");
-    }
-
-    if(m_policyEngine == nullptr)
-    {
-        return HttpResponse(
-            http::status::service_unavailable,
-            "application/json",
-            R"({"error":"Service unavailable","message":"Policy engine not available"})");
-    }
-
-    try
-    {
-        /*
-            Parse JSON from request body
-        */
-        auto json = nlohmann::json::parse(ctx.body);
-
-        /*
-            Check if it's a single policy or array of policies
-        */
-        nlohmann::json policyArray;
-        if(json.is_array() == true)
+        if(c == '\\')
         {
-            policyArray = json;
+            out += "\\\\";
+        }
+        else if(c == '"')
+        {
+            out += "\\\"";
+        }
+        else if(c == '\n')
+        {
+            out += "\\n";
         }
         else
         {
-            /*
-                Single policy - wrap in array
-            */
-            policyArray = nlohmann::json::array();
-            policyArray.push_back(json);
+            out += c;
         }
-
-        /*
-            Use PolicyEngine's JSON loading method
-        */
-        if(PolicyEngine::loadPoliciesFromJson(policyArray.dump()))
-        {
-            /*
-                Synchronize policies with eBPF map
-            */
-            if((m_ebpfManager != nullptr) && (m_policyEngine != nullptr))
-            {
-                auto policies = PolicyEngine::getAllPolicies();
-                if(pepctl::EbpfManager::updatePolicyMap(policies) == false)
-                {
-                    if(gLogger != nullptr)
-                    {
-                        gLogger->warn(LogContext(LogCategory::POLICY),
-                                      "Failed to synchronize policies with eBPF map");
-                    }
-                }
-                else
-                {
-                    if(gLogger != nullptr)
-                    {
-                        gLogger->info(
-                            LogContext(LogCategory::POLICY)
-                                .withField("policy_count", std::to_string(policies.size())),
-                            "Policies synchronized with eBPF map");
-                    }
-                }
-            }
-
-            return HttpResponse(
-                http::status::created,
-                "application/json",
-                R"({"status":"success","message":"Policy(ies) added successfully"})");
-        }
-
-        return HttpResponse(http::status::bad_request,
-                            "application/json",
-                            R"({"error":"Bad request","message":"Failed to add policy"})");
     }
-    catch(const std::exception& e)
-    {
-        return HttpResponse(http::status::bad_request,
-                            "application/json",
-                            "{\"error\":\"Invalid JSON\",\"message\":\"" + std::string(e.what())
-                                + "\"}");
-    }
-}
-
-HttpResponse MetricsServer::handlePolicyRemove(const HttpRequestContext& ctx)
-{
-    if(ctx.method != "DELETE")
-    {
-        return HttpResponse(
-            http::status::method_not_allowed,
-            "application/json",
-            R"({"error":"Method not allowed","message":"Use DELETE to remove policies"})");
-    }
-
-    if(m_policyEngine == nullptr)
-    {
-        return HttpResponse(
-            http::status::service_unavailable,
-            "application/json",
-            R"({"error":"Service unavailable","message":"Policy engine not available"})");
-    }
-
-    auto it = ctx.query_params.find("id");
-    if(it == ctx.query_params.end())
-    {
-        return HttpResponse(http::status::bad_request,
-                            "application/json",
-                            R"({"error":"Bad request","message":"Policy ID required"})");
-    }
-
-    if(pepctl::PolicyEngine::removePolicy(it->second))
-    {
-        return HttpResponse(http::status::ok,
-                            "application/json",
-                            R"({"status":"success","message":"Policy removed successfully"})");
-    }
-
-    return HttpResponse(http::status::not_found,
-                        "application/json",
-                        R"({"error":"Not found","message":"Policy not found"})");
-}
-
-HttpResponse MetricsServer::handleDashboard(const HttpRequestContext& /*unused*/)
-{
-    return HttpResponse(http::status::ok, "text/html", getDashboardHtml());
+    return out;
 }
 
 HttpResponse MetricsServer::handleReset(const HttpRequestContext& ctx)
@@ -1180,9 +983,9 @@ HttpResponse MetricsServer::handleReset(const HttpRequestContext& ctx)
 
     try
     {
-        /*
-            Reset all packet statistics
-        */
+        //
+        //             Reset all packet statistics
+        //
         m_daemonMetrics->packetsProcessed.store(0);
         m_daemonMetrics->packetsAllowed.store(0);
         m_daemonMetrics->packetsBlocked.store(0);
@@ -1190,34 +993,31 @@ HttpResponse MetricsServer::handleReset(const HttpRequestContext& ctx)
         m_daemonMetrics->packetsRateLimited.store(0);
         m_daemonMetrics->bytesProcessed.store(0);
 
-        /*
-            Reset start time to current time
-        */
+        //
+        //             Reset start time to current time
+        //
         m_daemonMetrics->startTime = std::chrono::system_clock::now();
 
-        /*
-            Reset eBPF statistics if available
-        */
+        //
+        //             Reset eBPF statistics if available
+        //
         if(m_ebpfManager != nullptr)
         {
             m_ebpfManager->resetStats();
         }
 
-        /*
-            Reset policy hit counts
-        */
+        //
+        //             Reset policy hit counts
+        //
         if(m_policyEngine != nullptr)
         {
-            /*
-                Note: This would require a method in PolicyEngine to reset hit counts
-            */
+            //
+            //                 Note: This would require a method in PolicyEngine to reset hit counts
+            //
             // For now, we'll just log that policies weren't reset
         }
 
-        if(gLogger != nullptr)
-        {
-            gLogger->info(LogContext(LogCategory::SYSTEM), "Packet statistics reset successfully");
-        }
+        m_logger->info(LogContext(LogCategory::SYSTEM), "Packet statistics reset successfully");
 
         return HttpResponse(
             http::status::ok,
@@ -1227,16 +1027,75 @@ HttpResponse MetricsServer::handleReset(const HttpRequestContext& ctx)
     }
     catch(const std::exception& e)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(LogContext(LogCategory::SYSTEM).withField("error", e.what()),
-                           "Error resetting statistics");
-        }
+        m_logger->error(LogContext(LogCategory::SYSTEM).withField("error", e.what()),
+                        "Error resetting statistics");
 
         return HttpResponse(
             http::status::internal_server_error,
             "application/json",
             R"({"error":"Internal server error","message":"Failed to reset statistics"})");
+    }
+}
+
+void MetricsServer::updateSystemMetrics()
+{
+    if(m_running.load() == false)
+    {
+        return;
+    }
+
+    //
+    //         Update system metrics
+    //
+    setGauge("pepctl_uptime_seconds", getUptimeSeconds());
+
+    //
+    //         Update policy engine metrics
+    //
+    if(m_policyEngine != nullptr)
+    {
+        setGauge("pepctl_policies_total", static_cast<double>(PolicyEngine::getPolicyCount()));
+    }
+
+    //
+    //         Update eBPF manager metrics and sync with daemon metrics
+    //
+    if(m_ebpfManager != nullptr)
+    {
+        auto stats = m_ebpfManager->getStats();
+        setCounter("pepctl_ebpf_packets_processed_total",
+                   static_cast<double>(stats.packets_processed));
+
+        //
+        //             Sync daemon metrics with eBPF statistics (eBPF is authoritative)
+        //
+        if(m_daemonMetrics != nullptr)
+        {
+            m_daemonMetrics->packetsProcessed.store(stats.packets_processed);
+            m_daemonMetrics->packetsAllowed.store(stats.packets_allowed);
+            m_daemonMetrics->packetsBlocked.store(stats.packets_blocked);
+            m_daemonMetrics->packetsLogged.store(stats.packets_logged);
+            m_daemonMetrics->packetsRateLimited.store(stats.packets_rate_limited);
+        }
+    }
+
+    //
+    //         Update daemon metrics (now synced with eBPF)
+    //
+    if(m_daemonMetrics != nullptr)
+    {
+        setCounter("pepctl_daemon_packets_processed_total",
+                   static_cast<double>(m_daemonMetrics->packetsProcessed.load()));
+        setCounter("pepctl_daemon_packets_allowed_total",
+                   static_cast<double>(m_daemonMetrics->packetsAllowed.load()));
+        setCounter("pepctl_daemon_packets_blocked_total",
+                   static_cast<double>(m_daemonMetrics->packetsBlocked.load()));
+        setCounter("pepctl_daemon_packets_logged_total",
+                   static_cast<double>(m_daemonMetrics->packetsLogged.load()));
+        setCounter("pepctl_daemon_packets_rate_limited_total",
+                   static_cast<double>(m_daemonMetrics->packetsRateLimited.load()));
+        setCounter("pepctl_daemon_bytes_processed_total",
+                   static_cast<double>(m_daemonMetrics->bytesProcessed.load()));
     }
 }
 
@@ -1261,11 +1120,10 @@ void MetricsServer::registerDefaultMetrics()
         "pepctl_ebpf_packets_processed_total", MetricType::COUNTER, "Total eBPF packets processed");
 }
 
-/*
-    CORS (Cross-Origin Resource Sharing) is a web security mechanism that allows web
-    pages from one domain to access resources from another domain safely.
-    It is used to allow the dashboard to access the metrics server.
-*/
+//
+//     CORS (Cross-Origin Resource Sharing) is a web security mechanism that allows web
+//     pages from one domain to access resources from another domain safely.
+//     It is used to allow the dashboard to access the metrics server.
 void MetricsServer::addCorsHeaders(http::response<http::string_body>& res) const
 {
     if(m_corsEnabled == true)

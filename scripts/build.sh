@@ -7,7 +7,6 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-BUILD_DIR="$PROJECT_ROOT/build"
 SOURCE_DIR="$PROJECT_ROOT"
 
 # Colors for output
@@ -26,6 +25,38 @@ ENABLE_COVERAGE="OFF"
 PARALLEL_JOBS=$(nproc)
 VERBOSE=false
 CLEAN_BUILD=false
+
+# Presets
+USE_PRESETS=true
+CONFIGURE_PRESET=""
+BUILD_PRESET=""
+
+# Toolchain / generator
+GENERATOR="Ninja"
+C_COMPILER="clang"
+CXX_COMPILER="clang++"
+
+resolve_build_dir() {
+if [[ "$BUILD_TYPE" == "Debug" ]]; then
+echo "$PROJECT_ROOT/build-ninja"
+else
+echo "$PROJECT_ROOT/build-ninja-release"
+fi
+}
+
+resolve_default_presets() {
+if [[ -n "$CONFIGURE_PRESET" ]]; then
+return 0
+fi
+
+if [[ "$BUILD_TYPE" == "Debug" ]]; then
+CONFIGURE_PRESET="clang-ninja-debug"
+BUILD_PRESET="build-debug"
+else
+CONFIGURE_PRESET="clang-ninja-release"
+BUILD_PRESET="build-release"
+fi
+}
 
 # Available targets
 ALL_TARGETS=(
@@ -81,6 +112,9 @@ OPTIONS:
 -v, --verbose Verbose build output
 -j, --jobs N Number of parallel jobs (default: $(nproc))
 --coverage Enable code coverage
+--preset NAME Use a specific CMake configure preset (default: auto)
+--build-preset NAME Use a specific CMake build preset (default: auto)
+--no-presets Do not use CMakePresets.json (fallback to explicit -D flags)
 --install-deps Install build dependencies before building
 --list-targets List all available targets
 
@@ -102,6 +136,7 @@ $0 --clean tests # Clean build and build tests
 $0 -j 8 pepctl # Build main executable with 8 parallel jobs
 $0 --verbose tests # Build tests with verbose output
 $0 libs tests # Build libraries and tests
+$0 --preset clang-ninja-debug --build-preset build-debug tests
 
 BUILD TYPES:
 Release Optimized build (-O3, no debug info)
@@ -135,7 +170,7 @@ check_prerequisites() {
 log_info "Checking build prerequisites..."
 
 # Check required tools
-local required_tools=("cmake" "make" "g++" "pkg-config")
+local required_tools=("cmake" "ninja" "clang" "clang++" "pkg-config")
 for tool in "${required_tools[@]}"; do
 if ! command -v "$tool" >/dev/null 2>&1; then
 log_error "Required tool '$tool' not found"
@@ -146,7 +181,7 @@ done
 
 # Check CMake version
 local cmake_version=$(cmake --version | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-local required_version="3.16"
+local required_version="3.20"
 if ! printf '%s\n%s\n' "$required_version" "$cmake_version" | sort -V -C; then
 log_error "CMake version $cmake_version is too old (required: $required_version+)"
 exit 1
@@ -157,6 +192,7 @@ log_success "All prerequisites satisfied"
 
 # Setup build directory
 setup_build_dir() {
+BUILD_DIR="$(resolve_build_dir)"
 log_info "Setting up build directory: $BUILD_DIR"
 
 if [[ "$CLEAN_BUILD" == "true" ]]; then
@@ -165,15 +201,42 @@ rm -rf "$BUILD_DIR"
 fi
 
 mkdir -p "$BUILD_DIR"
-cd "$BUILD_DIR"
 }
 
 # Configure CMake
 configure_cmake() {
 log_info "Configuring CMake (Build Type: $BUILD_TYPE)"
 
+if [[ "$USE_PRESETS" == "true" ]]; then
+resolve_default_presets
+
+local cmake_args=("--preset" "$CONFIGURE_PRESET")
+
+# Keep script toggles usable even when the preset has different defaults.
+cmake_args+=("-DENABLE_TESTS=$ENABLE_TESTS")
+cmake_args+=("-DCMAKE_EXPORT_COMPILE_COMMANDS=ON")
+
+if [[ "$ENABLE_COVERAGE" == "ON" ]]; then
+cmake_args+=("-DENABLE_COVERAGE=ON")
+log_info "Code coverage enabled"
+fi
+
+if [[ "$VERBOSE" == "true" ]]; then
+cmake_args+=("-DCMAKE_VERBOSE_MAKEFILE=ON")
+fi
+
+log_debug "CMake command: cmake ${cmake_args[*]}"
+
+if ! (cd "$PROJECT_ROOT" && cmake "${cmake_args[@]}"); then
+log_error "CMake configuration failed"
+exit 1
+fi
+else
 local cmake_args=(
+"-G" "$GENERATOR"
 "-DCMAKE_BUILD_TYPE=$BUILD_TYPE"
+"-DCMAKE_C_COMPILER=$C_COMPILER"
+"-DCMAKE_CXX_COMPILER=$CXX_COMPILER"
 "-DENABLE_TESTS=$ENABLE_TESTS"
 "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
 )
@@ -187,11 +250,12 @@ if [[ "$VERBOSE" == "true" ]]; then
 cmake_args+=("-DCMAKE_VERBOSE_MAKEFILE=ON")
 fi
 
-log_debug "CMake command: cmake ${cmake_args[*]} $SOURCE_DIR"
+log_debug "CMake command: cmake ${cmake_args[*]} -S $SOURCE_DIR -B $BUILD_DIR"
 
-if ! cmake "${cmake_args[@]}" "$SOURCE_DIR"; then
+if ! cmake "${cmake_args[@]}" -S "$SOURCE_DIR" -B "$BUILD_DIR"; then
 log_error "CMake configuration failed"
 exit 1
+fi
 fi
 
 log_success "CMake configuration completed"
@@ -235,23 +299,34 @@ local unique_targets=($(printf "%s\n" "${expanded_targets[@]}" | sort -u))
 
 log_info "Building targets: ${unique_targets[*]}"
 
-local make_args=("-j$PARALLEL_JOBS")
-if [[ "$VERBOSE" == "true" ]]; then
-make_args+=("VERBOSE=1")
-fi
-
 local failed_targets=()
 local successful_targets=()
 
 for target in "${unique_targets[@]}"; do
 log_build "Building $target..."
 
-if make "${make_args[@]}" "$target"; then
+if [[ "$USE_PRESETS" == "true" ]]; then
+resolve_default_presets
+if [[ -z "$BUILD_PRESET" ]]; then
+log_error "Build preset is required when using presets"
+return 1
+fi
+
+if cmake --build --preset "$BUILD_PRESET" --target "$target" --parallel "$PARALLEL_JOBS"; then
 log_success " $target built successfully"
 successful_targets+=("$target")
 else
 log_error " Failed to build $target"
 failed_targets+=("$target")
+fi
+else
+if cmake --build "$BUILD_DIR" --target "$target" --parallel "$PARALLEL_JOBS"; then
+log_success " $target built successfully"
+successful_targets+=("$target")
+else
+log_error " Failed to build $target"
+failed_targets+=("$target")
+fi
 fi
 done
 
@@ -284,7 +359,11 @@ return 0
 # Show build information
 show_build_info() {
 local source_short=$(basename "$SOURCE_DIR")
-local build_short=$(basename "$BUILD_DIR")
+local build_dir_effective="$BUILD_DIR"
+if [[ -z "$build_dir_effective" ]]; then
+build_dir_effective="$(resolve_build_dir)"
+fi
+local build_short=$(basename "$build_dir_effective")
 
 log_info "Build Information:"
 echo " Project: PEPCTL eBPF Network Security Framework"
@@ -301,7 +380,7 @@ echo
 if [[ "$VERBOSE" == "true" ]]; then
 log_debug "Full paths:"
 log_debug " Source: $SOURCE_DIR"
-log_debug " Build: $BUILD_DIR"
+log_debug " Build: $build_dir_effective"
 echo
 fi
 }
@@ -346,6 +425,18 @@ ENABLE_COVERAGE="ON"
 BUILD_TYPE="Debug" # Coverage requires debug info
 shift
 ;;
+--preset)
+CONFIGURE_PRESET="$2"
+shift 2
+;;
+--build-preset)
+BUILD_PRESET="$2"
+shift 2
+;;
+--no-presets)
+USE_PRESETS=false
+shift
+;;
 --install-deps)
 ./scripts/install_deps.sh
 shift
@@ -365,6 +456,9 @@ shift
 ;;
 esac
 done
+
+# Resolve BUILD_DIR early (for display + clean) after parsing options.
+BUILD_DIR="$(resolve_build_dir)"
 
 # Show banner
 echo

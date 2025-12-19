@@ -5,6 +5,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include <fmt/format.h>
 #include <spdlog/fmt/ostr.h>
@@ -19,9 +20,9 @@
 namespace pepctl {
 
 
-/**
- * @brief
- */
+///
+/// @brief
+///
 enum class LogLevel
 {
     TRACE = 0,
@@ -33,9 +34,9 @@ enum class LogLevel
     OFF = 6
 };
 
-/**
- * @brief Log categories for structured logging
- */
+///
+/// @brief Log categories for structured logging
+///
 enum class LogCategory
 {
     SYSTEM,      // System-level events
@@ -47,9 +48,9 @@ enum class LogCategory
     PERFORMANCE  // Performance-related events
 };
 
-/**
- * @brief Log context for structured logging
- */
+///
+/// @brief Log context for structured logging
+///
 struct LogContext
 {
     LogCategory category;
@@ -93,9 +94,9 @@ struct LogContext
     }
 };
 
-/**
- * @brief Logger configuration
- */
+///
+/// @brief Logger configuration
+///
 struct LoggerConfig
 {
     LogLevel level = LogLevel::INFO;
@@ -111,32 +112,35 @@ struct LoggerConfig
     std::string logFormat = "json";  // "json" or "text"
 };
 
-/**
- * @brief Main Logger class
- */
+///
+/// @brief Main Logger class
+///
 class Logger
 {
   public:
     Logger();
     virtual ~Logger();
 
-    /**
-     * @brief Initialize the logger
-     * @param config The logger configuration
-     * @return True if the logger was initialized successfully, false otherwise
-     */
+    static std::shared_ptr<Logger> createWithFallback(const LoggerConfig& desiredConfig,
+                                                      bool isSystemdService);
+
+    ///
+    /// @brief Initialize the logger
+    /// @param config The logger configuration
+    /// @return True if the logger was initialized successfully, false otherwise
+    ///
     bool initialize(const LoggerConfig& config);
 
-    /**
-     * @brief Shutdown the logger
-     */
+    ///
+    /// @brief Shutdown the logger
+    ///
     void shutdown();
 
-    /**
-     * @brief Log a message with context
-     * @param ctx The log context
-     * @param message The message to log
-     */
+    ///
+    /// @brief Log a message with context
+    /// @param ctx The log context
+    /// @param message The message to log
+    ///
     void trace(const LogContext& ctx, const std::string& message);
     void debug(const LogContext& ctx, const std::string& message);
     void info(const LogContext& ctx, const std::string& message);
@@ -144,12 +148,12 @@ class Logger
     void error(const LogContext& ctx, const std::string& message);
     void critical(const LogContext& ctx, const std::string& message);
 
-    /**
-     * @brief Template logging methods for format strings
-     * @param ctx The log context
-     * @param format The format string
-     * @param args The arguments to format
-     */
+    ///
+    /// @brief Template logging methods for format strings
+    /// @param ctx The log context
+    /// @param format The format string
+    /// @param args The arguments to format
+    ///
     template <typename... Args>
     void trace(const LogContext& ctx, const std::string& format, Args&&... args)
     {
@@ -193,79 +197,79 @@ class Logger
     void error(const std::string& message);
     void critical(const std::string& message);
 
-    /**
-     * @brief Set the log level
-     * @param level The log level
-     */
+    ///
+    /// @brief Set the log level
+    /// @param level The log level
+    ///
     void setLevel(LogLevel level);
 
-    /**
-     * @brief Get the current log level
-     * @return The current log level
-     */
+    ///
+    /// @brief Get the current log level
+    /// @return The current log level
+    ///
     LogLevel getLevel() const { return m_currentLevel; }
 
-    /**
-     * @brief Set the log pattern
-     * @param pattern The log pattern
-     */
+    ///
+    /// @brief Set the log pattern
+    /// @param pattern The log pattern
+    ///
     void setPattern(const std::string& pattern);
 
-    /**
-     * @brief Log a policy event
-     * @param policy_id The policy ID
-     * @param action The action
-     * @param client_ip The client IP
-     * @param details The details of the event
-     */
+    ///
+    /// @brief Log a policy event
+    /// @param policy_id The policy ID
+    /// @param action The action
+    /// @param client_ip The client IP
+    /// @param details The details of the event
+    ///
     void logPolicyEvent(const std::string& policy_id,
                         const std::string& action,
                         const std::string& client_ip,
                         const std::string& details);
 
-    /**
-     * @brief Log a security event
-     * @param event_type The event type
-     * @param client_ip The client IP
-     * @param details The details of the event
-     * @param level The log level
-     */
+    ///
+    /// @brief Log a security event
+    /// @param event_type The event type
+    /// @param client_ip The client IP
+    /// @param details The details of the event
+    /// @param level The log level
+    ///
     void logSecurityEvent(const std::string& event_type,
                           const std::string& client_ip,
                           const std::string& details,
                           LogLevel level = LogLevel::WARN);
 
-    /**
-     * @brief Log a performance event
-     * @param operation The operation
-     * @param duration_ms The duration in milliseconds
-     * @param metrics The metrics
-     */
+    ///
+    /// @brief Log a performance event
+    /// @param operation The operation
+    /// @param duration_ms The duration in milliseconds
+    /// @param metrics The metrics
+    ///
     void logPerformanceEvent(const std::string& operation,
                              double duration_ms,
                              const std::unordered_map<std::string, std::string>& metrics);
 
-    /**
-     * @brief Log a network event
-     * @param interface The interface
-     * @param event The event
-     * @param packet_info The packet information
-     */
+    ///
+    /// @brief Log a network event
+    /// @param interface The interface
+    /// @param event The event
+    /// @param packet_info The packet information
+    ///
     void logNetworkEvent(const std::string& interface,
                          const std::string& event,
                          const PacketInfo& packet_info);
 
-    /**
-     * @brief Log an eBPF event
-     * @param operation The operation
-     * @param success The success flag
-     * @param details The details of the event
-     */
+    ///
+    /// @brief Log an eBPF event
+    /// @param operation The operation
+    /// @param success The success flag
+    /// @param details The details of the event
+    ///
     void logEbpfEvent(const std::string& operation, bool success, const std::string& details);
 
-    /**
-     * @brief Log statistics
-     */
+    ///
+    /// @brief Log statistics
+    ///
     struct LogStats
     {
         uint64_t totalMessages{};
@@ -274,27 +278,29 @@ class Logger
         std::chrono::system_clock::time_point lastMessageTime;
     };
 
-    /**
-     * @brief Get the log statistics
-     * @return The log statistics
-     */
+    ///
+    /// @brief Get the log statistics
+    /// @return The log statistics
+    ///
     LogStats getStats() const;
 
-    /**
-     * @brief Reset the log statistics
-     */
+    ///
+    /// @brief Reset the log statistics
+    ///
     void resetStats();
 
-    /**
-     * @brief Flush the logs
-     */
+    ///
+    /// @brief Flush the logs
+    ///
     void flush();
-    /**
-     * @brief Rotate the logs
-     */
+    ///
+    /// @brief Rotate the logs
+    ///
     void rotateLogs();
 
   private:
+    static LoggerConfig makeFallbackConfig(bool isSystemdService);
+
     // spdlog logger instances
     std::shared_ptr<spdlog::logger> m_mainLogger;
     std::shared_ptr<spdlog::logger> m_structuredLogger;
@@ -305,54 +311,54 @@ class Logger
     mutable std::mutex m_statsMutex;
     LogStats m_stats;
 
-    /**
-     * @brief Log a message with context
-     * @param level The log level
-     * @param ctx The log context
-     * @param message The message to log
-     */
+    ///
+    /// @brief Log a message with context
+    /// @param level The log level
+    /// @param ctx The log context
+    /// @param message The message to log
+    ///
     void logWithContext(LogLevel level, const LogContext& ctx, const std::string& message);
-    /**
-     * @brief Format a structured message
-     * @param ctx The log context
-     * @param message The message to format
-     * @return The formatted message
-     */
+    ///
+    /// @brief Format a structured message
+    /// @param ctx The log context
+    /// @param message The message to format
+    /// @return The formatted message
+    ///
     static std::string formatStructuredMessage(const LogContext& ctx, const std::string& message);
-    /**
-     * @brief Format a JSON message
-     * @param ctx The log context
-     * @param message The message to format
-     * @return The formatted message
-     */
+    ///
+    /// @brief Format a JSON message
+    /// @param ctx The log context
+    /// @param message The message to format
+    /// @return The formatted message
+    ///
     static std::string formatJsonMessage(const LogContext& ctx, const std::string& message);
-    /**
-     * @brief Convert a log category to a string
-     * @param category The log category
-     * @return The string representation of the log category
-     */
+    ///
+    /// @brief Convert a log category to a string
+    /// @param category The log category
+    /// @return The string representation of the log category
+    ///
     static std::string categoryToString(LogCategory category);
-    /**
-     * @brief Convert a log level to a string
-     * @param level The log level
-     * @return The string representation of the log level
-     */
+    ///
+    /// @brief Convert a log level to a string
+    /// @param level The log level
+    /// @return The string representation of the log level
+    ///
     static std::string levelToString(LogLevel level);
 
-    /**
-     * @brief Convert a log level to a spdlog level
-     * @param level The log level
-     * @return The spdlog level
-     */
+    ///
+    /// @brief Convert a log level to a spdlog level
+    /// @param level The log level
+    /// @return The spdlog level
+    ///
     static spdlog::level::level_enum toSpdlogLevel(LogLevel level);
 
-    /**
-     * @brief Log a formatted message
-     * @param level The log level
-     * @param ctx The log context
-     * @param format The format string
-     * @param args The arguments to format
-     */
+    ///
+    /// @brief Log a formatted message
+    /// @param level The log level
+    /// @param ctx The log context
+    /// @param format The format string
+    /// @param args The arguments to format
+    ///
     template <typename... Args>
     void logFormatted(LogLevel level,
                       const LogContext& ctx,
@@ -372,9 +378,9 @@ class Logger
         }
         catch(const std::exception& e)
         {
-            /*
-                Fallback to unformatted message if formatting fails
-            */
+            //
+            //                 Fallback to unformatted message if formatting fails
+            //
             logWithContext(LogLevel::ERROR,
                            LogContext(LogCategory::SYSTEM),
                            "Log formatting error: " + std::string(e.what())
@@ -382,11 +388,11 @@ class Logger
         }
     }
 
-    /**
-     * @brief Update the statistics
-     * @param level The log level
-     * @param category The log category
-     */
+    ///
+    /// @brief Update the statistics
+    /// @param level The log level
+    /// @param category The log category
+    ///
     void updateStats(LogLevel level, LogCategory category);
 
     void setupSinks();
@@ -395,78 +401,5 @@ class Logger
     void setupSyslogSink();
     void setupSystemdSink();
 };
-
-/**
- * @brief Global logger instance and convenience macros
- */
-extern std::unique_ptr<Logger> gLogger;
-
-
-/**
- * @brief Convenience macros for common logging patterns
- */
-#define PEPCTL_LOG_TRACE(ctx, msg) \
-    if(pepctl::gLogger != nullptr) \
-    pepctl::gLogger->trace(ctx, msg)
-#define PEPCTL_LOG_DEBUG(ctx, msg) \
-    if(pepctl::gLogger != nullptr) \
-    pepctl::gLogger->debug(ctx, msg)
-#define PEPCTL_LOG_INFO(ctx, msg)  \
-    if(pepctl::gLogger != nullptr) \
-    pepctl::gLogger->info(ctx, msg)
-#define PEPCTL_LOG_WARN(ctx, msg)  \
-    if(pepctl::gLogger != nullptr) \
-    pepctl::gLogger->warn(ctx, msg)
-#define PEPCTL_LOG_ERROR(ctx, msg) \
-    if(pepctl::gLogger != nullptr) \
-    pepctl::gLogger->error(ctx, msg)
-#define PEPCTL_LOG_CRITICAL(ctx, msg) \
-    if(pepctl::gLogger != nullptr)    \
-    pepctl::gLogger->critical(ctx, msg)
-
-/**
- * @brief Formatted logging macros
- */
-#define PEPCTL_LOG_TRACE_FMT(ctx, fmt, ...) \
-    if(pepctl::gLogger != nullptr)          \
-    pepctl::gLogger->trace(ctx, fmt, __VA_ARGS__)
-#define PEPCTL_LOG_DEBUG_FMT(ctx, fmt, ...) \
-    if(pepctl::gLogger != nullptr)          \
-    pepctl::gLogger->debug(ctx, fmt, __VA_ARGS__)
-#define PEPCTL_LOG_INFO_FMT(ctx, fmt, ...) \
-    if(pepctl::gLogger != nullptr)         \
-    pepctl::gLogger->info(ctx, fmt, __VA_ARGS__)
-#define PEPCTL_LOG_WARN_FMT(ctx, fmt, ...) \
-    if(pepctl::gLogger != nullptr)         \
-    pepctl::gLogger->warn(ctx, fmt, __VA_ARGS__)
-#define PEPCTL_LOG_ERROR_FMT(ctx, fmt, ...) \
-    if(pepctl::gLogger != nullptr)          \
-    pepctl::gLogger->error(ctx, fmt, __VA_ARGS__)
-#define PEPCTL_LOG_CRITICAL_FMT(ctx, fmt, ...) \
-    if(pepctl::gLogger != nullptr)             \
-    pepctl::gLogger->critical(ctx, fmt, __VA_ARGS__)
-
-/**
- * @brief Simple logging without context
- */
-#define PEPCTL_LOG_SIMPLE_TRACE(msg) \
-    if(pepctl::gLogger != nullptr)   \
-    pepctl::gLogger->trace(msg)
-#define PEPCTL_LOG_SIMPLE_DEBUG(msg) \
-    if(pepctl::gLogger != nullptr)   \
-    pepctl::gLogger->debug(msg)
-#define PEPCTL_LOG_SIMPLE_INFO(msg) \
-    if(pepctl::gLogger != nullptr)  \
-    pepctl::gLogger->info(msg)
-#define PEPCTL_LOG_SIMPLE_WARN(msg) \
-    if(pepctl::gLogger != nullptr)  \
-    pepctl::gLogger->warn(msg)
-#define PEPCTL_LOG_SIMPLE_ERROR(msg) \
-    if(pepctl::gLogger != nullptr)   \
-    pepctl::gLogger->error(msg)
-#define PEPCTL_LOG_SIMPLE_CRITICAL(msg) \
-    if(pepctl::gLogger != nullptr)      \
-    pepctl::gLogger->critical(msg)
-
 
 }  // namespace pepctl

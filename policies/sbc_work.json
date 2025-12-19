@@ -1,0 +1,59 @@
+[
+  {
+    "id": "sbc_allow_http",
+    "action": "ALLOW",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 80,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "sbc_log_only_admin",
+    "action": "LOG_ONLY",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 8080,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "sbc_block_telnet",
+    "action": "BLOCK",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 23,
+      "protocol": "TCP"
+    }
+  },
+  {
+    "id": "sbc_rate_limit_ssh",
+    "action": "RATE_LIMIT",
+    "src": {
+      "ip": "0.0.0.0",
+      "port": 0,
+      "protocol": "TCP"
+    },
+    "dst": {
+      "ip": "0.0.0.0",
+      "port": 22,
+      "protocol": "TCP"
+    },
+    "rate_limit_bps": 64
+  }
+]

@@ -184,23 +184,25 @@ EXTENSIONS=("*.cpp" "*.hpp" "*.c" "*.h" "*.cc" "*.cxx")
 
 # Function to generate compilation database
 generate_compile_db() {
-if [[ ! -d "$PROJECT_ROOT/build" ]]; then
+local BUILD_DIR="$PROJECT_ROOT/build-ninja"
+
+if [[ ! -d "$BUILD_DIR" ]]; then
 print_warning "Build directory not found. Creating one..."
-mkdir -p "$PROJECT_ROOT/build"
+mkdir -p "$BUILD_DIR"
 fi
 
 print_info "Generating compile_commands.json for clang-tidy..."
-cd "$PROJECT_ROOT/build" && cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .. >/dev/null
+(cd "$PROJECT_ROOT" && cmake --preset clang-ninja-debug >/dev/null)
 
 # Copy to project root for run-clang-tidy
-if [[ -f "$PROJECT_ROOT/build/compile_commands.json" ]]; then
-cp "$PROJECT_ROOT/build/compile_commands.json" "$PROJECT_ROOT/"
+if [[ -f "$BUILD_DIR/compile_commands.json" ]]; then
+cp "$BUILD_DIR/compile_commands.json" "$PROJECT_ROOT/"
 fi
 cd "$PROJECT_ROOT"
 }
 
 # Build compile_commands.json for clang-tidy if it doesn't exist
-if [[ "$FORMAT_ONLY" != "true" && ! -f "$PROJECT_ROOT/build/compile_commands.json" ]]; then
+if [[ "$FORMAT_ONLY" != "true" && ! -f "$PROJECT_ROOT/build-ninja/compile_commands.json" ]]; then
 generate_compile_db
 fi
 
@@ -211,7 +213,7 @@ while IFS= read -r -d '' file; do
 TOTAL_FILES=$((TOTAL_FILES + 1))
 
 # Skip files in build directory
-if [[ "$file" == *"/build/"* ]]; then
+if [[ "$file" == *"/build/"* || "$file" == *"/build-ninja/"* || "$file" == *"/build-ninja-release/"* ]]; then
 continue
 fi
 
@@ -239,7 +241,7 @@ TIDY_CMD="$TIDY_CMD --fix"
 fi
 
 # Run clang-tidy and capture output
-TIDY_OUTPUT=$(cd "$PROJECT_ROOT" && $TIDY_CMD "$file" -p build 2>&1 || true)
+TIDY_OUTPUT=$(cd "$PROJECT_ROOT" && $TIDY_CMD "$file" -p build-ninja 2>&1 || true)
 
 # Check if there are issues
 if echo "$TIDY_OUTPUT" | grep -q "warning:\|error:"; then

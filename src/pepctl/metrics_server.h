@@ -1,24 +1,26 @@
 #pragma once
 
 #include <atomic>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/version.hpp>
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
 
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/steady_timer.hpp>
-#include <boost/beast/core.hpp>
-#include <boost/beast/http.hpp>
-#include <boost/beast/version.hpp>
-
 #include "pepctl/core.h"
 #include "pepctl/ebpf_manager.h"
 #include "pepctl/policy_engine.h"
 
-namespace pepctl {
+
+namespace pepctl 
+{
 
 class Listener;  // Forward declaration for shared_ptr
 
@@ -27,9 +29,7 @@ namespace http = beast::http;
 namespace net = boost::asio;
 using tcp = net::ip::tcp;
 
-/**
- * @brief Metric types for Prometheus
- */
+/// @brief Metric types for Prometheus
 enum class MetricType
 {
     COUNTER,
@@ -38,9 +38,7 @@ enum class MetricType
     SUMMARY
 };
 
-/**
- * @brief Individual metric entry
- */
+/// @brief Individual metric entry
 struct MetricEntry
 {
     MetricType type;
@@ -61,9 +59,7 @@ struct MetricEntry
     {}
 };
 
-/**
- * @brief HTTP request context
- */
+/// @brief HTTP request context
 struct HttpRequestContext
 {
     std::string method;
@@ -73,9 +69,7 @@ struct HttpRequestContext
     std::unordered_map<std::string, std::string> query_params;
 };
 
-/**
- * @brief HTTP response
- */
+/// @brief HTTP response
 struct HttpResponse
 {
     http::status status;
@@ -92,35 +86,27 @@ struct HttpResponse
     {}
 };
 
-/**
- * @brief Request handler interface
- */
+/// @brief Request handler interface
 using RequestHandler = std::function<HttpResponse(const HttpRequestContext&)>;
 
-/**
- * @brief Main MetricsServer class
- */
+/// @brief Main MetricsServer class
 class MetricsServer
 {
   public:
-    MetricsServer();
+    explicit MetricsServer(std::shared_ptr<Logger> logger);
     virtual ~MetricsServer();
 
-    /**
-     * @brief Initialization and lifecycle
-     */
+    Logger& getLogger() { return *m_logger; }
+
+    /// @brief Initialization and lifecycle
     bool initialize(uint16_t port, const std::string& bind_address = "0.0.0.0");
     bool start();
     void stop();
 
-    /**
-     * @brief Check if the server is running
-     */
+    /// @brief Check if the server is running
     bool isRunning() const { return m_running.load(); }
 
-    /**
-     * @brief Metric registration and updates
-     */
+    /// @brief Metric registration and updates
     void registerMetric(const std::string& name, MetricType type, const std::string& help);
     void setGauge(const std::string& name,
                   double value,
@@ -135,58 +121,38 @@ class MetricsServer
                                  double value,
                                  const std::unordered_map<std::string, std::string>& labels = {});
 
-    /**
-     * @brief Register an HTTP endpoint
-     */
+    /// @brief Register an HTTP endpoint
     void registerEndpoint(const std::string& path,
                           const std::string& method,
                           const RequestHandler& handler);
 
-    /**
-     * @brief Register a static endpoint
-     */
+    /// @brief Register a static endpoint
     void registerStaticEndpoint(const std::string& path,
                                 const std::string& content,
                                 const std::string& content_type = "text/html");
 
-    /**
-     * @brief Setup default endpoints
-     */
+    /// @brief Setup default endpoints
     void setupDefaultEndpoints();
 
-    /**
-     * @brief Set the policy engine
-     */
+    /// @brief Set the policy engine
     void setPolicyEngine(PolicyEngine* engine) { m_policyEngine = engine; }
 
-    /**
-     * @brief Set the eBPF manager
-     */
+    /// @brief Set the eBPF manager
     void setEbpfManager(EbpfManager* manager) { m_ebpfManager = manager; }
 
-    /**
-     * @brief Set the daemon metrics
-     */
+    /// @brief Set the daemon metrics
     void setDaemonMetrics(Metrics* metrics) { m_daemonMetrics = metrics; }
 
-    /**
-     * @brief Set the metrics prefix
-     */
+    /// @brief Set the metrics prefix
     void setMetricsPrefix(const std::string& prefix) { m_metricsPrefix = prefix; }
 
-    /**
-     * @brief Set the update interval
-     */
+    /// @brief Set the update interval
     void setUpdateInterval(std::chrono::seconds interval) { m_updateInterval = interval; }
 
-    /**
-     * @brief Enable CORS
-     */
+    /// @brief Enable CORS
     void enableCors(bool enable) { m_corsEnabled = enable; }
 
-    /**
-     * @brief Public HTTP processing member function for HttpSession
-     */
+    /// @brief Public HTTP processing member function for HttpSession
     void processHttpRequest(const http::request<http::string_body>& req,
                             http::response<http::string_body>& res);
 
@@ -194,6 +160,7 @@ class MetricsServer
     net::io_context m_ioc;
     tcp::acceptor m_acceptor;
     std::atomic<bool> m_running;
+    std::shared_ptr<Logger> m_logger;
     uint16_t m_port;
     std::string m_bindAddress;
     std::string m_metricsPrefix;
@@ -211,23 +178,17 @@ class MetricsServer
     EbpfManager* m_ebpfManager{nullptr};
     Metrics* m_daemonMetrics{nullptr};
 
-    /**
-     * @brief Private methods
-     */
+    /// @brief Private methods
     void serverLoop();
     void handleAccept();
     void handleRequest(tcp::socket socket);
 
-    /**
-     * @brief Request processing helpers
-     */
+    /// @brief Request processing helpers
     HttpRequestContext parseRequest(const http::request<http::string_body>& req);
     static void buildResponse(const HttpResponse& response, http::response<http::string_body>& res);
     static std::unordered_map<std::string, std::string> parseQueryParams(const std::string& target);
 
-    /**
-     * @brief Built-in handlers
-     */
+    /// @brief Built-in handlers
     HttpResponse handleMetrics(const HttpRequestContext& ctx);
     static HttpResponse handleHealth(const HttpRequestContext& ctx);
     HttpResponse handleInfo(const HttpRequestContext& ctx);
@@ -238,57 +199,41 @@ class MetricsServer
     HttpResponse handleDashboard(const HttpRequestContext& ctx);
     HttpResponse handleReset(const HttpRequestContext& ctx);
 
-    /**
-     * @brief Metrics formatting
-     */
+    /// @brief Metrics formatting
     std::string formatMetricEntry(const MetricEntry& entry);
     static std::string escapeLabelValue(const std::string& value);
 
-    /**
-     * @brief Metric updates
-     */
+    /// @brief Metric updates
     void updateSystemMetrics();
     void updatePolicyMetrics();
     void startUpdateTimer();
 
-    /**
-     * @brief Utility functions
-     */
+    /// @brief Utility functions
     static void createErrorResponse(http::status status,
                                     const std::string& message,
                                     http::response<http::string_body>& res);
     static double getUptimeSeconds();
 
-    /**
-     * @brief Default metric setup
-     */
+    /// @brief Default metric setup
     void registerDefaultMetrics();
 
-    /**
-     * @brief System integration
-     */
+    /// @brief System integration
     void addCorsHeaders(http::response<http::string_body>& res) const;
     static std::string getDashboardHtml();
     static std::string getCurrentTimestampIso();
 
-    /**
-     * @brief Static utility methods for system metrics
-     */
+    /// @brief Static utility methods for system metrics
     static std::unordered_map<std::string, double> collectNetworkMetrics(
         const std::string& interface);
     static std::unordered_map<std::string, double> collectProcessMetrics();
 
-    /**
-     * @brief Static system reading functions
-     */
+    /// @brief Static system reading functions
     static double readProcStatValue(const std::string& field);
     static double readProcMeminfoValue(const std::string& field);
     static double readSysClassNetValue(const std::string& interface, const std::string& field);
 };
 
-/**
- * @brief Utility class for metric collection
- */
+/// @brief Utility class for metric collection
 class MetricsCollector
 {
   public:

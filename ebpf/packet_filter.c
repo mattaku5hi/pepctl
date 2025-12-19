@@ -6,10 +6,10 @@
 /*
     It must go first
 */
-#include <bpf/bpf_endian.h>
-#include <bpf/bpf_helpers.h>
-
 #include "vmlinux.h"
+
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
 
 // Only define constants that are missing from vmlinux.h
 #ifndef ETH_P_IP

@@ -7,7 +7,6 @@
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <queue>
-#include <shared_mutex>
 #include <thread>
 
 #include "core.h"
@@ -16,18 +15,17 @@
 namespace pepctl 
 {
 
+class Logger; // fwd decl
 
-/*
-    Policy evaluation result
-*/
+// Policy evaluation result
 struct PolicyEvaluationResult
 {
     PolicyAction action;
     std::string policy_id;
     bool rate_limited;
-    uint64_t rate_limit_bps;
+    uint64_t rate_limit_bytes_per_second;
 
-    PolicyEvaluationResult() : action(PolicyAction::ALLOW), rate_limited(false), rate_limit_bps(0)
+    PolicyEvaluationResult() : action(PolicyAction::ALLOW), rate_limited(false), rate_limit_bytes_per_second(0)
     {
 
     }
@@ -36,15 +34,13 @@ struct PolicyEvaluationResult
         action(act),
         policy_id(id),
         rate_limited(false),
-        rate_limit_bps(0)
+        rate_limit_bytes_per_second(0)
     {
 
     }
 };
 
-/*
-    Policy hash key for efficient lookup
-*/
+// Policy hash key for efficient lookup
 struct PolicyKey
 {
     uint32_t src_ip;
@@ -72,9 +68,7 @@ struct PolicyKey
     }
 };
 
-/*
-    Hash function for PolicyKey
-*/
+// Hash function for PolicyKey
 struct PolicyKeyHash
 {
     std::size_t operator()(const PolicyKey& key) const
@@ -90,9 +84,7 @@ struct PolicyKeyHash
     }
 };
 
-/*
-    Policy update operations for lock-free updates
-*/
+// Policy update operations for lock-free updates
 enum class PolicyOperation
 {
     ADD,
@@ -121,16 +113,14 @@ struct PolicyUpdate
     }
 };
 
-/*
-    Rate limiting state
-*/
+// Rate limiting state
 struct RateLimitState
 {
     std::atomic<uint64_t> bytes_this_second{0};
     std::atomic<std::chrono::seconds::rep> last_reset_time{0};
-    uint64_t limit_bps;
+    uint64_t limit_bytes_per_second;
 
-    RateLimitState(uint64_t limit) : limit_bps(limit)
+    RateLimitState(uint64_t limit) : limit_bytes_per_second(limit)
     {
         last_reset_time.store(std::chrono::duration_cast<std::chrono::seconds>(
                                   std::chrono::system_clock::now().time_since_epoch())
@@ -138,110 +128,88 @@ struct RateLimitState
     }
 };
 
-/*
-    Main PolicyEngine class
-*/
+// Main PolicyEngine class
 class PolicyEngine
 {
   public:
-    PolicyEngine();
+    explicit PolicyEngine(std::shared_ptr<Logger> logger);
     virtual ~PolicyEngine();
 
-    /*
-        Initialization
-    */
+    // Initialization
     bool initialize(size_t capacity = defaultPolicyCapacity);
     void shutdown();
 
-    /*
-        Policy management (thread-safe)
-    */
+    // Policy management (thread-safe)
     static bool addPolicy(const Policy& policy);
     static bool updatePolicy(const std::string& policy_id, const Policy& policy);
     static bool removePolicy(const std::string& policy_id);
     static std::shared_ptr<Policy> getPolicy(const std::string& policy_id);
     static std::vector<std::shared_ptr<Policy>> getAllPolicies();
 
-    /*
-        Policy evaluation (high-performance, lock-free)
-    */
+    // Policy evaluation (high-performance, lock-free)
     static PolicyEvaluationResult evaluatePacket(const PacketInfo& packet);
 
-    /*
-        JSON serialization
-    */
+    // JSON serialization
     static bool loadPoliciesFromJson(const std::string& json_str);
     static bool loadPoliciesFromFile(const std::string& filename);
     static std::string exportPoliciesToJson();
     static bool savePoliciesToFile(const std::string& filename);
 
-    /*
-        Statistics
-    */
+    // Statistics
     static size_t getPolicyCount();
     static void cleanupExpiredPolicies();
 
-    /*
-        Rate limiting
-    */
-    static bool isRateLimited(const PolicyKey& key, uint32_t packet_size, uint64_t limit_bps);
+    // Rate limiting
+    static bool isRateLimited(const PolicyKey& key,
+                              uint32_t packet_size,
+                              uint64_t limit_bytes_per_second);
 
   private:
-    /*
-        Lock-free policy storage
-    */
+    std::shared_ptr<Logger> m_logger;
+
+    // Policy storage
     using PolicyMap = boost::unordered_map<std::string, std::shared_ptr<Policy>>;
     using PolicyLookupMap = boost::unordered_map<PolicyKey, std::string, PolicyKeyHash>;
     using RateLimitMap =
         boost::unordered_map<PolicyKey, std::unique_ptr<RateLimitState>, PolicyKeyHash>;
 
-    /*
-        Thread-safe policy storage with RCU-like semantics
-    */
-    mutable std::shared_mutex m_policiesMutex;
-    std::unique_ptr<PolicyMap> m_policies;
-    std::unique_ptr<PolicyLookupMap> m_policyLookup;
+    struct PolicyTables
+    {
+        PolicyMap policies;
+        PolicyLookupMap lookup;
+    };
 
-    /*
-        Rate limiting storage
-    */
-    mutable std::shared_mutex m_rateLimitMutex;
+    // RCU-style snapshot: readers do atomic load; writer publishes new snapshot.
+    std::atomic<std::shared_ptr<const PolicyTables>> m_tables;
+
+    // Rate limiting storage
+    mutable std::mutex m_rateLimitMutex;
     std::unique_ptr<RateLimitMap> m_rateLimits;
 
-    /*
-        Thread-safe update queue (replaces lockfree queue)
-    */
+    // Thread-safe update queue (replaces lockfree queue)
     std::queue<PolicyUpdate> m_updateQueue;
     std::mutex m_updateQueueMutex;
     std::condition_variable m_updateQueueCv;
 
-    /*
-        Background processing
-    */
+    // Background processing
     std::atomic<bool> m_isRunning;
     std::thread m_updateProcessorThread;
     std::thread m_cleanupThread;
 
-    /*
-        Configuration
-    */
+    // Configuration
     size_t m_capacity{};
     std::chrono::seconds m_cleanupInterval{};
 
-    /*
-        Private methods
-    */
+    // Private methods
     void processUpdates();
     void processSingleUpdate(const PolicyUpdate& update);
     static PolicyKey createPolicyKey(const PacketInfo& packet);
-    std::shared_ptr<Policy> findMatchingPolicy(const PolicyKey& key) const;
-    void rebuildLookupMap();
+    std::shared_ptr<Policy> findMatchingPolicy(const PolicyKey& key,
+                                               const PolicyTables& tables) const;
     void periodicCleanup();
     static bool matchesPolicy(const Policy& policy, const PolicyKey& key);
 
-    /*
-        JSON helpers
-    */
+    // JSON helpers
     static nlohmann::json policyToJson(const Policy& policy);
     static std::optional<Policy> jsonToPolicy(const nlohmann::json& json);
 };

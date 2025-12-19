@@ -95,7 +95,7 @@ log_verbose "Checking if PEPCTL daemon is running..."
 
 if ! curl -s --connect-timeout 5 "$PEPCTL_API_URL/stats" > /dev/null 2>&1; then
 log_error "PEPCTL daemon is not running or not accessible at $PEPCTL_API_URL"
-log_info "Please start the daemon first: sudo ./build/src/pepctl --config tests/test_config.json --daemon"
+log_info "Please start the daemon first: sudo ./build-ninja/src/pepctl --config tests/test_config.json --daemon"
 exit 1
 fi
 

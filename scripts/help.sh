@@ -127,11 +127,11 @@ echo
 
 echo -e "${GREEN} OUTPUT LOCATIONS${NC}"
 echo "────────────────────────────────────────────────────────────────"
-echo " build/ - Build artifacts"
-echo " build/pepctl - Main executable"
-echo " build/tests/ - Test binaries"
-echo " build/test-results/ - Test reports (XML/JSON)"
-echo " build/coverage-report/ - Coverage HTML reports"
+echo " build-ninja/ - Debug build artifacts"
+echo " build-ninja/src/pepctl - Main executable (Debug)"
+echo " build-ninja/tests/ - Test binaries (Debug)"
+echo " build-ninja-release/ - Release build artifacts"
+echo " build-ninja-release/src/pepctl - Main executable (Release)"
 echo " package/ - DEB packages"
 echo
 

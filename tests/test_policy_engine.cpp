@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 #include <pepctl/core.h>
+#include <pepctl/logger.h>
 #include <pepctl/policy_engine.h>
 
 using namespace pepctl;
@@ -12,7 +13,17 @@ class PolicyEngineTest : public ::testing::Test
   protected:
     void SetUp() override
     {
-        engine = std::make_unique<PolicyEngine>();
+        logger = std::make_shared<Logger>();
+        LoggerConfig cfg;
+        cfg.level = LogLevel::ERROR;
+        cfg.consoleOutput = false;
+        cfg.fileOutput = false;
+        cfg.syslogOutput = false;
+        cfg.systemdOutput = false;
+        cfg.structuredLogging = false;
+        [[maybe_unused]] bool ok = logger->initialize(cfg);
+
+        engine = std::make_unique<PolicyEngine>(logger);
         ASSERT_TRUE(engine->initialize());
     }
 
@@ -24,6 +35,7 @@ class PolicyEngineTest : public ::testing::Test
         }
     }
 
+    std::shared_ptr<Logger> logger;
     std::unique_ptr<PolicyEngine> engine;
 };
 

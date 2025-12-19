@@ -1,11 +1,16 @@
+#include <algorithm>
 #include <arpa/inet.h>
 #include <boost/core/ignore_unused.hpp>
+#include <chrono>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <linux/if_link.h>
 #include <net/if.h>
+#include <ranges>
 #include <sstream>
+#include <stdexcept>
 #include <sys/resource.h>
 #include <unistd.h>
 #include <utility>
@@ -17,9 +22,8 @@
 namespace pepctl
 {
 
-/*
-  Global variables for static methods
-*/
+
+//   Global variables for static methods
 static struct bpf_object* sBpfObj = nullptr;
 static struct bpf_program* sBpfProg = nullptr;
 static struct bpf_link* sBpfLink = nullptr;
@@ -29,7 +33,8 @@ static std::string sInterfaceName;
 static EbpfProgramType sProgramType = EbpfProgramType::XDP;
 
 
-EbpfManager::EbpfManager() :
+EbpfManager::EbpfManager(std::shared_ptr<Logger> logger) :
+    m_logger(std::move(logger)),
     m_bpfObj(nullptr),
     m_bpf_prog(nullptr),
     m_bpf_link(nullptr),
@@ -44,9 +49,12 @@ EbpfManager::EbpfManager() :
     m_processing_running(false),
     m_stats{}
 {
-    /*
-      Set memory limit for eBPF
-    */
+    if(m_logger == nullptr)
+    {
+        throw std::invalid_argument("Logger must not be null");
+    }
+
+    // Set memory limit for eBPF
     [[maybe_unused]] bool result = setRlimitMemlock();
 }
 
@@ -63,27 +71,19 @@ auto EbpfManager::initialize(const std::string& interface_name,
     sInterfaceName = interface_name;
     sProgramType = program_type;
 
-    /*
-      Get interface index
-    */
+    // Get interface index
     m_interface_index = getInterfaceIndex(interface_name);
     if(m_interface_index < 0)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(LogContext(LogCategory::EBPF),
-                           "Failed to get interface index for " + interface_name);
-        }
+        m_logger->error(LogContext(LogCategory::EBPF),
+                        "Failed to get interface index for " + interface_name);
         return false;
     }
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::EBPF)
-                          .withField("interface", interface_name)
-                          .withField("index", std::to_string(m_interface_index)),
-                      "eBPF manager initialized successfully");
-    }
+    m_logger->info(LogContext(LogCategory::EBPF)
+                       .withField("interface", interface_name)
+                       .withField("index", std::to_string(m_interface_index)),
+                   "eBPF manager initialized successfully");
 
     return true;
 }
@@ -92,18 +92,13 @@ auto EbpfManager::loadProgram(const std::string& program_path) -> bool
 {
     if(m_program_loaded.load())
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->warn(LogContext(LogCategory::EBPF), "Program already loaded");
-        }
+        m_logger->warn(LogContext(LogCategory::EBPF), "Program already loaded");
         return true;
     }
 
     m_program_path = program_path;
 
-    /*
-      Load eBPF object
-    */
+    // Load eBPF object
     m_bpfObj = bpf_object__open(program_path.c_str());
     if(m_bpfObj == nullptr)
     {
@@ -113,9 +108,7 @@ auto EbpfManager::loadProgram(const std::string& program_path) -> bool
 
     sBpfObj = m_bpfObj;
 
-    /*
-      Load the eBPF program
-    */
+    // Load the eBPF program
     if(bpf_object__load(m_bpfObj) != 0)
     {
         logLibbpfError("bpf_object__load");
@@ -125,35 +118,36 @@ auto EbpfManager::loadProgram(const std::string& program_path) -> bool
         return false;
     }
 
-    /*
-      Find the main program based on program type
-    */
+    // Find the main program based on program type
     const char* programName = nullptr;
     switch(m_programType)
     {
         case EbpfProgramType::XDP:
+        {
             programName = "packet_filter_modern";
             break;
+        }
         case EbpfProgramType::TC_INGRESS:
         case EbpfProgramType::TC_EGRESS:
+        {
             programName = "packet_filter_tc";
             break;
+        }
         default:
+        {
             programName = "packet_filter_modern";
             break;
+        }
     }
 
     m_bpf_prog = bpf_object__find_program_by_name(m_bpfObj, programName);
     if(m_bpf_prog == nullptr)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(
-                LogContext(LogCategory::EBPF)
-                    .withField("program_name", programName)
-                    .withField("program_type", std::to_string(static_cast<int>(m_programType))),
-                "Failed to find eBPF program in " + program_path);
-        }
+        m_logger->error(
+            LogContext(LogCategory::EBPF)
+                .withField("program_name", programName)
+                .withField("program_type", std::to_string(static_cast<int>(m_programType))),
+            "Failed to find eBPF program in object");
         bpf_object__close(m_bpfObj);
         m_bpfObj = nullptr;
         sBpfObj = nullptr;
@@ -162,9 +156,7 @@ auto EbpfManager::loadProgram(const std::string& program_path) -> bool
 
     sBpfProg = m_bpf_prog;
 
-    /*
-      Load maps
-    */
+    // Load maps
     if(loadMaps() == false)
     {
         bpf_object__close(m_bpfObj);
@@ -173,9 +165,7 @@ auto EbpfManager::loadProgram(const std::string& program_path) -> bool
         return false;
     }
 
-    /*
-      Verify program
-    */
+    // Verify program
     if(verifyProgram() == false)
     {
         bpf_object__close(m_bpfObj);
@@ -186,11 +176,8 @@ auto EbpfManager::loadProgram(const std::string& program_path) -> bool
 
     m_program_loaded.store(true);
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::EBPF).withField("path", program_path),
-                      "eBPF program loaded successfully");
-    }
+    m_logger->info(LogContext(LogCategory::EBPF).withField("path", program_path),
+                   "eBPF program loaded successfully");
 
     return true;
 }
@@ -199,148 +186,98 @@ auto EbpfManager::attachProgram() -> bool
 {
     if(sBpfProg == nullptr)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(LogContext(LogCategory::EBPF), "No program loaded to attach");
-        }
+        m_logger->error(LogContext(LogCategory::EBPF), "No program loaded to attach");
         return false;
     }
 
     if(sBpfLink != nullptr)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->warn(LogContext(LogCategory::EBPF), "Program already attached");
-        }
+        m_logger->warn(LogContext(LogCategory::EBPF), "Program already attached");
         return true;
     }
 
-    /*
-      Get interface index
-    */
+    // Get interface index
     int ifIndex = if_nametoindex(sInterfaceName.c_str());
     if(ifIndex == 0)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(LogContext(LogCategory::EBPF),
-                           "Failed to get interface index for " + sInterfaceName);
-        }
+        m_logger->error(LogContext(LogCategory::EBPF),
+                        "Failed to get interface index for " + sInterfaceName);
         return false;
     }
 
-    /*
-      Check if TC programs are actually attached - if so, skip XDP attachment
-    */
+    // Check if TC programs are actually attached - if so, skip XDP attachment
     std::string checkCmd =
         "bpftool net show dev " + sInterfaceName + " | grep -A 10 'tc:' | grep -q 'id [0-9]'";
     int tcCheck = std::system(checkCmd.c_str());
     if(tcCheck == 0 && sProgramType == EbpfProgramType::XDP)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->info(LogContext(LogCategory::EBPF).withField("interface", sInterfaceName),
-                          "TC program already attached, skipping XDP attachment");
-        }
+        m_logger->info(LogContext(LogCategory::EBPF).withField("interface", sInterfaceName),
+                       "TC program already attached, skipping XDP attachment");
         // Create a dummy link to indicate "attached" state
         sBpfLink = reinterpret_cast<struct bpf_link*>(0x1);  // Non-null dummy value
         return true;
     }
 
-    /*
-      Attach based on program type
-    */
+    // Attach based on program type
     switch(sProgramType)
     {
         case EbpfProgramType::XDP:
         {
-            /*
-                Try native mode first, fallback to generic if needed
-            */
+            // Try native mode first, fallback to generic if needed
             struct bpf_xdp_attach_opts opts = {};
             opts.sz = sizeof(opts);
 
-            /*
-                Try native mode first
-            */
+            // Try native mode first
             opts.old_prog_fd = 0;
             int progFd = bpf_program__fd(sBpfProg);
             int ret = bpf_xdp_attach(ifIndex, progFd, XDP_FLAGS_DRV_MODE, &opts);
 
             if(ret != 0)
             {
-                if(gLogger != nullptr)
-                {
-                    gLogger->warn(
-                        LogContext(LogCategory::EBPF).withField("error", std::to_string(ret)),
-                        "Failed to attach XDP in native mode, trying generic mode");
-                }
+                m_logger->warn(LogContext(LogCategory::EBPF).withField("error", std::to_string(ret)),
+                               "Failed to attach XDP in native mode, trying generic mode");
 
-                /*
-                    Fallback to generic mode
-                */
+                // Fallback to generic mode
                 ret = bpf_xdp_attach(ifIndex, progFd, XDP_FLAGS_SKB_MODE, &opts);
                 if(ret != 0)
                 {
-                    if(gLogger != nullptr)
-                    {
-                        gLogger->error(LogContext(LogCategory::EBPF)
-                                            .withField("error", std::to_string(ret)),
-                                        "Failed to attach XDP in both native and generic modes");
-                    }
+                    m_logger->error(LogContext(LogCategory::EBPF)
+                                        .withField("error", std::to_string(ret)),
+                                    "Failed to attach XDP in both native and generic modes");
                     return false;
                 }
 
-                if(gLogger != nullptr)
-                {
-                    gLogger->info(LogContext(LogCategory::EBPF),
-                                    "XDP attached in generic mode");
-                }
+                m_logger->info(LogContext(LogCategory::EBPF), "XDP attached in generic mode");
             }
             else
             {
-                if(gLogger != nullptr)
-                {
-                    gLogger->info(LogContext(LogCategory::EBPF), "XDP attached in native mode");
-                }
+                m_logger->info(LogContext(LogCategory::EBPF), "XDP attached in native mode");
             }
 
-            /*
-                Create a dummy link to indicate successful attachment
-            */
+            // Create a dummy link to indicate successful attachment
             sBpfLink = reinterpret_cast<struct bpf_link*>(0x3);  // XDP marker
             break;
         }
         case EbpfProgramType::TC_INGRESS:
         case EbpfProgramType::TC_EGRESS:
         {
-            /*
-                Use modern libbpf TC API
-            */
+            // Use modern libbpf TC API
             struct bpf_tc_hook hook = {};
             hook.sz = sizeof(hook);
             hook.ifindex = ifIndex;
             hook.attach_point =
                 (sProgramType == EbpfProgramType::TC_INGRESS) ? BPF_TC_INGRESS : BPF_TC_EGRESS;
 
-            /*
-                Create TC hook
-            */
+            // Create TC hook
             int ret = bpf_tc_hook_create(&hook);
             if(ret != 0 && ret != -EEXIST)
             {
-                if(gLogger != nullptr)
-                {
-                    gLogger->error(
-                        LogContext(LogCategory::EBPF).withField("error", std::to_string(ret)),
-                        "Failed to create TC hook");
-                }
+                m_logger->error(LogContext(LogCategory::EBPF).withField("error", std::to_string(ret)),
+                                "Failed to create TC hook");
                 return false;
             }
 
-            /*
-                Attach program
-            */
+            // Attach program
             struct bpf_tc_opts opts = {};
             opts.sz = sizeof(opts);
             opts.prog_fd = bpf_program__fd(sBpfProg);
@@ -348,48 +285,33 @@ auto EbpfManager::attachProgram() -> bool
             ret = bpf_tc_attach(&hook, &opts);
             if(ret != 0)
             {
-                if(gLogger != nullptr)
-                {
-                    gLogger->error(
-                        LogContext(LogCategory::EBPF).withField("error", std::to_string(ret)),
-                        "Failed to attach TC program");
-                }
+                m_logger->error(LogContext(LogCategory::EBPF).withField("error", std::to_string(ret)),
+                                "Failed to attach TC program");
                 return false;
             }
 
-            /*
-                Store hook info for later detachment (use a dummy link)
-            */
+            // Store hook info for later detachment (use a dummy link)
             sBpfLink = reinterpret_cast<struct bpf_link*>(0x2);  // TC marker
             break;
         }
         case EbpfProgramType::SOCKET_FILTER:
         {
-            if(gLogger != nullptr)
-            {
-                gLogger->error(LogContext(LogCategory::EBPF),
-                               "Socket filter attachment not yet implemented");
-            }
+            m_logger->error(LogContext(LogCategory::EBPF),
+                            "Socket filter attachment not yet implemented");
             return false;
         }
     }
 
     if(sBpfLink == nullptr)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(LogContext(LogCategory::EBPF), "Failed to attach eBPF program");
-        }
+        m_logger->error(LogContext(LogCategory::EBPF), "Failed to attach eBPF program");
         return false;
     }
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::EBPF)
-                          .withField("interface", sInterfaceName)
-                          .withField("type", std::to_string(static_cast<int>(sProgramType))),
-                      "eBPF program attached successfully");
-    }
+    m_logger->info(LogContext(LogCategory::EBPF)
+                       .withField("interface", sInterfaceName)
+                       .withField("type", std::to_string(static_cast<int>(sProgramType))),
+                   "eBPF program attached successfully");
 
     return true;
 }
@@ -397,21 +319,15 @@ auto EbpfManager::attachProgram() -> bool
 void EbpfManager::notifyProgramAttached()
 {
     m_program_attached.store(true);
-    if(gLogger != nullptr)
-    {
-        gLogger->debug(LogContext(LogCategory::EBPF),
-                       "Instance notified of successful program attachment");
-    }
+    m_logger->debug(LogContext(LogCategory::EBPF),
+                    "Instance notified of successful program attachment");
 }
 
 void EbpfManager::notifyProgramDetached()
 {
     m_program_attached.store(false);
-    if(gLogger != nullptr)
-    {
-        gLogger->debug(LogContext(LogCategory::EBPF),
-                       "Instance notified of successful program detachment");
-    }
+    m_logger->debug(LogContext(LogCategory::EBPF),
+                    "Instance notified of successful program detachment");
 }
 
 auto EbpfManager::detachProgram() -> bool
@@ -421,27 +337,18 @@ auto EbpfManager::detachProgram() -> bool
         return true;  // Already detached
     }
 
-    /*
-      Check if this is our dummy link (TC case)
-    */
+    // Check if this is our dummy link (TC case)
     if(sBpfLink == reinterpret_cast<struct bpf_link*>(0x1))
     {
         sBpfLink = nullptr;
-        if(gLogger != nullptr)
-        {
-            gLogger->info(LogContext(LogCategory::EBPF), "Skipped detaching (manual TC mode)");
-        }
+        m_logger->info(LogContext(LogCategory::EBPF), "Skipped detaching (manual TC mode)");
         return true;
     }
 
-    /*
-      Check if this is our XDP link
-    */
+    // Check if this is our XDP link
     if(sBpfLink == reinterpret_cast<struct bpf_link*>(0x3))
     {
-        /*
-          Detach XDP program
-        */
+        // Detach XDP program
         int ifIndex = if_nametoindex(sInterfaceName.c_str());
         if(ifIndex > 0)
         {
@@ -449,21 +356,14 @@ auto EbpfManager::detachProgram() -> bool
         }
 
         sBpfLink = nullptr;
-        if(gLogger != nullptr)
-        {
-            gLogger->info(LogContext(LogCategory::EBPF), "XDP program detached");
-        }
+        m_logger->info(LogContext(LogCategory::EBPF), "XDP program detached");
         return true;
     }
 
-    /*
-      Check if this is our TC link
-    */
+    // Check if this is our TC link
     if(sBpfLink == reinterpret_cast<struct bpf_link*>(0x2))
     {
-        /*
-          Detach TC program using modern API
-        */
+        // Detach TC program using modern API
         int ifIndex = if_nametoindex(sInterfaceName.c_str());
         if(ifIndex > 0)
         {
@@ -482,34 +382,24 @@ auto EbpfManager::detachProgram() -> bool
         }
 
         sBpfLink = nullptr;
-        if(gLogger != nullptr)
-        {
-            gLogger->info(LogContext(LogCategory::EBPF), "TC program detached");
-        }
+        m_logger->info(LogContext(LogCategory::EBPF), "TC program detached");
         return true;
     }
 
     [[maybe_unused]] int result = bpf_link__destroy(sBpfLink);
     sBpfLink = nullptr;
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::EBPF), "eBPF program detached successfully");
-    }
+    m_logger->info(LogContext(LogCategory::EBPF), "eBPF program detached successfully");
 
     return true;
 }
 
 void EbpfManager::shutdown()
 {
-    /*
-      Stop packet processing if running
-    */
+    // Stop packet processing if running
     stopPacketProcessing();
 
-    /*
-      Only close/free resources if they were initialized
-    */
+    // Only close/free resources if they were initialized
     if(m_bpfObj != nullptr)
     {
         bpf_object__close(m_bpfObj);
@@ -530,50 +420,32 @@ void EbpfManager::shutdown()
     m_processing_active.store(false);
     m_processing_running.store(false);
     m_stats = {};
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::EBPF), "EbpfManager shutdown complete");
-    }
+    m_logger->info(LogContext(LogCategory::EBPF), "EbpfManager shutdown complete");
 }
 
 auto EbpfManager::updatePolicyMap(const std::vector<std::shared_ptr<Policy>>& policies) -> bool
 {
     if(sPolicyMapFd < 0)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(LogContext(LogCategory::EBPF), "Policy map not loaded");
-        }
+        m_logger->error(LogContext(LogCategory::EBPF), "Policy map not loaded");
         return false;
     }
 
-    /*
-      Clear existing policies
-    */
+    // Clear existing policies
     if(clearPolicyMap() == false)
     {
         return false;
     }
 
-    /*
-      Add new policies
-    */
-    int successCount = 0;
-    for(const auto& policy : policies)
-    {
-        if(policy && addPolicyToMap(*policy))
-        {
-            successCount++;
-        }
-    }
+    // Add new policies
+    const int successCount = static_cast<int>(std::ranges::count_if(policies, [this](const auto& policy) {
+        return policy && addPolicyToMap(*policy);
+    }));
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::EBPF)
-                          .withField("total", std::to_string(policies.size()))
-                          .withField("success", std::to_string(successCount)),
-                      "Policy map updated");
-    }
+    m_logger->info(LogContext(LogCategory::EBPF)
+                       .withField("total", std::to_string(policies.size()))
+                       .withField("success", std::to_string(successCount)),
+                   "Policy map updated");
 
     return successCount > 0;
 }
@@ -585,9 +457,7 @@ auto EbpfManager::addPolicyToMap(const Policy& policy) -> bool
         return false;
     }
 
-    /*
-      Create eBPF-compatible policy key (must match eBPF program structure exactly)
-    */
+    // Create eBPF-compatible policy key (must match eBPF program structure exactly)
     struct EbpfPolicyKey
     {
         uint32_t src_ip;
@@ -616,34 +486,27 @@ auto EbpfManager::addPolicyToMap(const Policy& policy) -> bool
     entry.action = static_cast<uint32_t>(policy.action);
     entry.rate_limit = policy.rateLimitBps;
 
-    /*
-      Update map
-    */
+    // Update map
     int ret = bpf_map_update_elem(sPolicyMapFd, &key, &entry, BPF_ANY);
     if(ret != 0)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(LogContext(LogCategory::EBPF)
-                               .withField("policy_id", policy.id)
-                               .withField("error", std::to_string(ret)),
-                           "Failed to add policy to map");
-        }
+        m_logger->error(LogContext(LogCategory::EBPF)
+                            .withField("policy_id", policy.id)
+                            .withField("error", std::to_string(ret)),
+                        "Failed to add policy to map");
         return false;
     }
 
-    if(gLogger != nullptr)
-    {
-        gLogger->debug(LogContext(LogCategory::EBPF)
-                           .withField("policy_id", policy.id)
-                           .withField("src_ip", std::to_string(key.src_ip))
-                           .withField("dst_ip", std::to_string(key.dst_ip))
-                           .withField("src_port", std::to_string(ntohs(key.src_port)))
-                           .withField("dst_port", std::to_string(ntohs(key.dst_port)))
-                           .withField("protocol", std::to_string(key.protocol))
-                           .withField("action", std::to_string(entry.action)),
-                       "Policy added to eBPF map");
-    }
+    m_logger->debug(LogContext(LogCategory::EBPF)
+                        .withField("policy_id", policy.id)
+                        .withField("src_ip", std::to_string(key.src_ip))
+                        .withField("dst_ip", std::to_string(key.dst_ip))
+                        .withField("src_port", std::to_string(ntohs(key.src_port)))
+                        .withField("dst_port", std::to_string(ntohs(key.dst_port)))
+                        .withField("protocol", std::to_string(key.protocol))
+                        .withField("action", std::to_string(entry.action))
+                        .withField("rate_limit", std::to_string(entry.rate_limit)),
+                    "Policy added to eBPF map");
 
     return true;
 }
@@ -652,14 +515,9 @@ auto EbpfManager::removePolicyFromMap(const std::string& policy_id) -> bool
 {
     boost::ignore_unused(policy_id);
 
-    /*
-      This is a simplified implementation
-      In a real system, you'd need to maintain a mapping of policy_id to PolicyKey
-    */
-    if(gLogger != nullptr)
-    {
-        gLogger->warn(LogContext(LogCategory::EBPF), "Policy removal by ID not fully implemented");
-    }
+    // This is a simplified implementation
+    // In a real system, you'd need to maintain a mapping of policy_id to PolicyKey
+    m_logger->warn(LogContext(LogCategory::EBPF), "Policy removal by ID not fully implemented");
     return false;
 }
 
@@ -670,9 +528,7 @@ auto EbpfManager::clearPolicyMap() -> bool
         return false;
     }
 
-    /*
-      Use eBPF-compatible key structure
-    */
+    // Use eBPF-compatible key structure
     struct EbpfPolicyKey
     {
         uint32_t src_ip;
@@ -686,9 +542,7 @@ auto EbpfManager::clearPolicyMap() -> bool
     EbpfPolicyKey key = {};
     EbpfPolicyKey nextKey{};
 
-    /*
-      Iterate through all entries and delete them
-    */
+    // Iterate through all entries and delete them
     while(bpf_map_get_next_key(sPolicyMapFd, &key, &nextKey) == 0)
     {
         [[maybe_unused]] int result = bpf_map_delete_elem(sPolicyMapFd, &nextKey);
@@ -710,38 +564,27 @@ void EbpfManager::setEbpfPacketCallback(EbpfPacketCallback callback)
 
 auto EbpfManager::startPacketProcessing() -> bool
 {
-    if(gLogger != nullptr)
-    {
-        gLogger->debug(
-            LogContext(LogCategory::EBPF)
-                .withField("m_program_loaded", m_program_loaded.load() ? "true" : "false")
-                .withField("m_program_attached", m_program_attached.load() ? "true" : "false")
-                .withField("m_processing_active", m_processing_active.load() ? "true" : "false")
-                .withField("interface", m_interfaceName)
-                .withField("program_path", m_program_path),
-            "Attempting to start packet processing");
-    }
+    m_logger->debug(LogContext(LogCategory::EBPF)
+                        .withField("m_program_loaded", m_program_loaded.load() ? "true" : "false")
+                        .withField("m_program_attached", m_program_attached.load() ? "true" : "false")
+                        .withField("m_processing_active", m_processing_active.load() ? "true" : "false")
+                        .withField("interface", m_interfaceName)
+                        .withField("program_path", m_program_path),
+                    "Attempting to start packet processing");
     if(m_processing_active.load())
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->warn(LogContext(LogCategory::EBPF), "Packet processing already active");
-        }
+        m_logger->warn(LogContext(LogCategory::EBPF), "Packet processing already active");
         return true;
     }
 
     if(!m_program_loaded.load() || !m_program_attached.load())
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(
-                LogContext(LogCategory::EBPF)
-                    .withField("m_program_loaded", m_program_loaded.load() ? "true" : "false")
-                    .withField("m_program_attached", m_program_attached.load() ? "true" : "false")
-                    .withField("interface", m_interfaceName)
-                    .withField("program_path", m_program_path),
-                "Cannot start processing: program not loaded or attached");
-        }
+        m_logger->error(LogContext(LogCategory::EBPF)
+                            .withField("m_program_loaded", m_program_loaded.load() ? "true" : "false")
+                            .withField("m_program_attached", m_program_attached.load() ? "true" : "false")
+                            .withField("interface", m_interfaceName)
+                            .withField("program_path", m_program_path),
+                        "Cannot start processing: program not loaded or attached");
         return false;
     }
 
@@ -749,10 +592,7 @@ auto EbpfManager::startPacketProcessing() -> bool
     m_processing_active.store(true);
     m_processing_thread = std::thread(&EbpfManager::packetProcessingLoop, this);
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::EBPF), "Packet processing started");
-    }
+    m_logger->info(LogContext(LogCategory::EBPF), "Packet processing started");
 
     return true;
 }
@@ -771,17 +611,12 @@ void EbpfManager::stopPacketProcessing()
     }
     m_processing_active.store(false);
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(LogContext(LogCategory::EBPF), "Packet processing stopped");
-    }
+    m_logger->info(LogContext(LogCategory::EBPF), "Packet processing stopped");
 }
 
 auto EbpfManager::getStats() const -> EbpfManager::EbpfStats
 {
-    /*
-      Update stats from kernel before returning
-    */
+    // Update stats from kernel before returning
     const_cast<EbpfManager*>(this)->updateKernelStats();
 
     std::lock_guard<std::mutex> lock(m_statsMutex);
@@ -806,9 +641,7 @@ auto EbpfManager::readPolicyMap(std::vector<EbpfPolicyEntry>& policies) -> bool
     PolicyKey nextKey{};
     EbpfPolicyEntry entry{};
 
-    /*
-      Iterate through all entries
-    */
+    // Iterate through all entries
     while(bpf_map_get_next_key(sPolicyMapFd, &key, &nextKey) == 0)
     {
         if(bpf_map_lookup_elem(sPolicyMapFd, &nextKey, &entry) == 0)
@@ -858,9 +691,7 @@ auto EbpfManager::loadMaps() -> bool
         return false;
     }
 
-    /*
-      Load policy map
-    */
+    // Load policy map
     struct bpf_map* policyMap = bpf_object__find_map_by_name(m_bpfObj, "policy_map");
     if(policyMap != nullptr)
     {
@@ -868,9 +699,7 @@ auto EbpfManager::loadMaps() -> bool
         sPolicyMapFd = m_policy_map_fd;
     }
 
-    /*
-      Load stats map
-    */
+    // Load stats map
     struct bpf_map* statsMap = bpf_object__find_map_by_name(m_bpfObj, "stats_map");
     if(statsMap != nullptr)
     {
@@ -878,9 +707,7 @@ auto EbpfManager::loadMaps() -> bool
         sStatsMapFd = m_stats_map_fd;
     }
 
-    /*
-      Set up ring buffer for packet events
-    */
+    // Set up ring buffer for packet events
     struct bpf_map* packetEventsMap = bpf_object__find_map_by_name(m_bpfObj, "packet_events");
     if(packetEventsMap != nullptr)
     {
@@ -888,23 +715,16 @@ auto EbpfManager::loadMaps() -> bool
         m_ring_buffer = ring_buffer__new(ringFd, handleRingBufferEvent, this, nullptr);
         if(m_ring_buffer == nullptr)
         {
-            if(gLogger != nullptr)
-            {
-                gLogger->error(LogContext(LogCategory::EBPF), "Failed to create ring buffer");
-            }
+            m_logger->error(LogContext(LogCategory::EBPF), "Failed to create ring buffer");
             return false;
         }
     }
 
-    if(gLogger != nullptr)
-    {
-        gLogger->info(
-            LogContext(LogCategory::EBPF)
-                .withField("policy_fd", std::to_string(m_policy_map_fd))
-                .withField("stats_fd", std::to_string(m_stats_map_fd))
-                .withField("ring_buffer", (m_ring_buffer != nullptr) ? "initialized" : "null"),
-            "eBPF maps loaded");
-    }
+    m_logger->info(LogContext(LogCategory::EBPF)
+                       .withField("policy_fd", std::to_string(m_policy_map_fd))
+                       .withField("stats_fd", std::to_string(m_stats_map_fd))
+                       .withField("ring_buffer", (m_ring_buffer != nullptr) ? "initialized" : "null"),
+                   "eBPF maps loaded");
 
     return m_policy_map_fd >= 0;  // At least policy map should be available
 }
@@ -916,16 +736,11 @@ auto EbpfManager::verifyProgram() -> bool
         return false;
     }
 
-    /*
-      Basic verification - check if program loaded successfully
-    */
+    // Basic verification - check if program loaded successfully
     int progFd = bpf_program__fd(m_bpf_prog);
     if(progFd < 0)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(LogContext(LogCategory::EBPF), "Invalid program file descriptor");
-        }
+        m_logger->error(LogContext(LogCategory::EBPF), "Invalid program file descriptor");
         return false;
     }
 
@@ -936,27 +751,18 @@ void EbpfManager::packetProcessingLoop()
 {
     if(m_ring_buffer == nullptr)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(LogContext(LogCategory::EBPF), "Ring buffer not initialized");
-        }
+        m_logger->error(LogContext(LogCategory::EBPF), "Ring buffer not initialized");
         return;
     }
 
     while(m_processing_running.load())
     {
-        /*
-          Poll ring buffer for events (timeout: 100ms)
-        */
+        // Poll ring buffer for events (timeout: 100ms)
         int ret = ring_buffer__poll(m_ring_buffer, 100);
         if(ret < 0 && ret != -EINTR)
         {
-            if(gLogger != nullptr)
-            {
-                gLogger->error(
-                    LogContext(LogCategory::EBPF).withField("error", std::to_string(ret)),
-                    "Ring buffer poll failed");
-            }
+            m_logger->error(LogContext(LogCategory::EBPF).withField("error", std::to_string(ret)),
+                            "Ring buffer poll failed");
             break;
         }
     }
@@ -966,9 +772,7 @@ int EbpfManager::handleRingBufferEvent(void* ctx, void* data, size_t data_sz)
 {
     auto* manager = static_cast<EbpfManager*>(ctx);
 
-    /*
-      Define kernel packet metadata structure (must match eBPF program)
-    */
+    // Define kernel packet metadata structure (must match eBPF program)
     struct PacketMetadata
     {
         uint32_t src_ip;
@@ -986,28 +790,28 @@ int EbpfManager::handleRingBufferEvent(void* ctx, void* data, size_t data_sz)
         return 0;
     }
 
-    /*
-      Cast the data to our packet metadata structure
-    */
+    // Cast the data to our packet metadata structure
     auto* meta = static_cast<PacketMetadata*>(data);
 
-    /*
-      Convert to PacketInfo
-    */
+    // Convert to PacketInfo
     PacketInfo packet;
     packet.src.ip = meta->src_ip;
-    packet.src.port = meta->src_port;
+    packet.src.port = ntohs(meta->src_port);
     packet.src.protocol = static_cast<Protocol>(meta->protocol);
     packet.dst.ip = meta->dst_ip;
-    packet.dst.port = meta->dst_port;
+    packet.dst.port = ntohs(meta->dst_port);
     packet.dst.protocol = static_cast<Protocol>(meta->protocol);
     packet.size = meta->packet_size;
-    packet.timestamp = std::chrono::system_clock::from_time_t(meta->timestamp / 1000000000);
+    {
+        static const std::chrono::system_clock::time_point system_at_steady_epoch = std::chrono::system_clock::now()
+            - std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::steady_clock::now().time_since_epoch());
+
+        packet.timestamp = system_at_steady_epoch
+                           + std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::nanoseconds(meta->timestamp));
+    }
     packet.interfaceName = manager->m_interfaceName;
 
-    /*
-      Use enhanced callback if available, otherwise fall back to regular callback
-    */
+    // Use enhanced callback if available, otherwise fall back to regular callback
     if(manager->m_ebpf_packet_callback)
     {
         manager->m_ebpf_packet_callback(packet, meta->action);
@@ -1017,9 +821,7 @@ int EbpfManager::handleRingBufferEvent(void* ctx, void* data, size_t data_sz)
         manager->m_packet_callback(packet);
     }
 
-    /*
-      Update statistics
-    */
+    // Update statistics
     {
         std::lock_guard<std::mutex> lock(manager->m_statsMutex);
         manager->m_stats.packets_processed++;
@@ -1035,9 +837,7 @@ auto EbpfManager::updateKernelStats() -> bool
         return false;
     }
 
-    /*
-      Define the eBPF stats structure (must match kernel definition)
-    */
+    // Define the eBPF stats structure (must match kernel definition)
     struct EbpfStats
     {
         uint64_t packets_processed;
@@ -1050,45 +850,31 @@ auto EbpfManager::updateKernelStats() -> bool
 
     uint32_t key = 0;  // Single entry in the array map
 
-    /*
-      Get number of CPUs to allocate per-CPU values array
-    */
+    // Get number of CPUs to allocate per-CPU values array
     int numCpus = libbpf_num_possible_cpus();
     if(numCpus <= 0)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->error(LogContext(LogCategory::EBPF), "Failed to get number of CPUs");
-        }
+        m_logger->error(LogContext(LogCategory::EBPF), "Failed to get number of CPUs");
         return false;
     }
 
-    /*
-      Allocate array for per-CPU values
-    */
+    // Allocate array for per-CPU values
     std::vector<EbpfStats> cpuStats(numCpus);
 
-    /*
-      Read per-CPU statistics from the map
-    */
+    // Read per-CPU statistics from the map
     int ret = bpf_map_lookup_elem(m_stats_map_fd, &key, cpuStats.data());
     if(ret != 0)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->debug(LogContext(LogCategory::EBPF)
-                               .withField("error", std::to_string(ret))
-                               .withField("errno", std::to_string(errno)),
-                           "Failed to read stats from eBPF map");
-        }
+        m_logger->debug(LogContext(LogCategory::EBPF)
+                            .withField("error", std::to_string(ret))
+                            .withField("errno", std::to_string(errno)),
+                        "Failed to read stats from eBPF map");
         return false;
     }
 
-    /*
-      Aggregate statistics across all CPUs
-    */
+    // Aggregate statistics across all CPUs
     EbpfStats totalStats = {};
-    for(int cpu = 0; cpu < numCpus; cpu++)
+    for(int cpu : std::views::iota(0, numCpus))
     {
         totalStats.packets_processed += cpuStats[cpu].packets_processed;
         totalStats.packets_allowed += cpuStats[cpu].packets_allowed;
@@ -1098,9 +884,7 @@ auto EbpfManager::updateKernelStats() -> bool
         totalStats.map_lookup_errors += cpuStats[cpu].map_lookup_errors;
     }
 
-    /*
-      Update userspace statistics
-    */
+    // Update userspace statistics
     {
         std::lock_guard<std::mutex> lock(m_statsMutex);
         m_stats.packets_processed = totalStats.packets_processed;
@@ -1109,24 +893,19 @@ auto EbpfManager::updateKernelStats() -> bool
         m_stats.packets_logged = totalStats.packets_logged;
         m_stats.packets_rate_limited = totalStats.packets_rate_limited;
         m_stats.map_lookup_errors = totalStats.map_lookup_errors;
-        /*
-          Keep existing map_updates value as it's userspace-only
-        */
+        // Keep existing map_updates value as it's userspace-only
     }
 
-    if(gLogger != nullptr)
-    {
-        gLogger->debug(
-            LogContext(LogCategory::EBPF)
-                .withField("cpus", std::to_string(numCpus))
-                .withField("packets_processed", std::to_string(totalStats.packets_processed))
-                .withField("packets_allowed", std::to_string(totalStats.packets_allowed))
-                .withField("packets_blocked", std::to_string(totalStats.packets_blocked))
-                .withField("packets_logged", std::to_string(totalStats.packets_logged))
-                .withField("packets_rate_limited", std::to_string(totalStats.packets_rate_limited))
-                .withField("map_lookup_errors", std::to_string(totalStats.map_lookup_errors)),
-            "Updated eBPF statistics from kernel");
-    }
+    m_logger->debug(
+        LogContext(LogCategory::EBPF)
+            .withField("cpus", std::to_string(numCpus))
+            .withField("packets_processed", std::to_string(totalStats.packets_processed))
+            .withField("packets_allowed", std::to_string(totalStats.packets_allowed))
+            .withField("packets_blocked", std::to_string(totalStats.packets_blocked))
+            .withField("packets_logged", std::to_string(totalStats.packets_logged))
+            .withField("packets_rate_limited", std::to_string(totalStats.packets_rate_limited))
+            .withField("map_lookup_errors", std::to_string(totalStats.map_lookup_errors)),
+        "Updated eBPF statistics from kernel");
 
     return true;
 }
@@ -1138,13 +917,10 @@ auto EbpfManager::getInterfaceIndex(const std::string& interface_name) -> int
 
 void EbpfManager::logLibbpfError(const std::string& operation)
 {
-    if(gLogger != nullptr)
-    {
-        gLogger->error(LogContext(LogCategory::EBPF)
-                           .withField("operation", operation)
-                           .withField("errno", std::to_string(errno)),
-                       "libbpf operation failed");
-    }
+    m_logger->error(LogContext(LogCategory::EBPF)
+                        .withField("operation", operation)
+                        .withField("errno", std::to_string(errno)),
+                    "libbpf operation failed");
 }
 
 auto EbpfManager::setRlimitMemlock() -> bool
@@ -1157,10 +933,7 @@ auto EbpfManager::setRlimitMemlock() -> bool
 
     if(setrlimit(RLIMIT_MEMLOCK, &rlimNew) != 0)
     {
-        if(gLogger != nullptr)
-        {
-            gLogger->warn(LogContext(LogCategory::EBPF), "Failed to increase RLIMIT_MEMLOCK");
-        }
+        m_logger->warn(LogContext(LogCategory::EBPF), "Failed to increase RLIMIT_MEMLOCK");
         return false;
     }
 
@@ -1174,19 +947,18 @@ auto EbpfProgramLoader::compileProgram(const std::string& source_path,
     std::vector<std::string> args = {
         "clang", "-O2", "-target", "bpf", "-c", source_path, "-o", output_path};
 
-    for(const auto& includePath : include_paths)
-    {
-        args.push_back("-I" + includePath);
-    }
+    std::ranges::transform(include_paths, std::back_inserter(args), [](const auto& includePath) {
+        return "-I" + includePath;
+    });
 
     return runClangCommand(args);
 }
 
 auto EbpfProgramLoader::validateProgram(const std::string& program_path) -> bool
 {
-    /*
-      Try to open and load the program
-    */
+    //
+    //       Try to open and load the program
+    //
     struct bpf_object* obj = bpf_object__open(program_path.c_str());
     if(obj == nullptr)
     {
@@ -1239,11 +1011,11 @@ auto EbpfProgramLoader::getDefaultProgramPath(EbpfProgramType type) -> std::stri
 auto EbpfProgramLoader::runClangCommand(const std::vector<std::string>& args) -> bool
 {
     std::ostringstream cmd;
-    for(size_t i = 0; i < args.size(); ++i)
+    for(auto i : std::views::iota(size_t{0}, args.size()))
     {
-        if(i > 0)
+        if(i != 0)
         {
-            cmd << " ";
+            cmd << ' ';
         }
         cmd << args[i];
     }

@@ -7,6 +7,7 @@
 #include <boost/beast/http.hpp>
 #include <gtest/gtest.h>
 #include <pepctl/core.h>
+#include <pepctl/logger.h>
 #include <pepctl/metrics_server.h>
 
 using namespace pepctl;
@@ -20,7 +21,17 @@ class MetricsServerTest : public ::testing::Test
   protected:
     void SetUp() override
     {
-        server = std::make_unique<MetricsServer>();
+        logger = std::make_shared<Logger>();
+        LoggerConfig cfg;
+        cfg.level = LogLevel::ERROR;
+        cfg.consoleOutput = false;
+        cfg.fileOutput = false;
+        cfg.syslogOutput = false;
+        cfg.systemdOutput = false;
+        cfg.structuredLogging = false;
+        [[maybe_unused]] bool ok = logger->initialize(cfg);
+
+        server = std::make_unique<MetricsServer>(logger);
         test_port = 9999;  // Use a different port for testing
 
         // Initialize and start the server
@@ -36,6 +47,7 @@ class MetricsServerTest : public ::testing::Test
         }
     }
 
+    std::shared_ptr<Logger> logger;
     std::unique_ptr<MetricsServer> server;
     uint16_t test_port{};
 };

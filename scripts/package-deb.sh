@@ -187,9 +187,14 @@ clean_build() {
     cd "$PROJECT_ROOT"
     
     # Clean CMake build
-    if [[ -d "build" ]]; then
-        rm -rf build
-        log_info "Removed build directory"
+    if [[ -d "build-ninja" ]]; then
+        rm -rf build-ninja
+        log_info "Removed build-ninja directory"
+    fi
+
+    if [[ -d "build-ninja-release" ]]; then
+        rm -rf build-ninja-release
+        log_info "Removed build-ninja-release directory"
     fi
     
     # Clean Debian build artifacts
@@ -211,10 +216,11 @@ build_project() {
         ./scripts/build.sh
     else
         # Fallback to manual build
-        mkdir -p build
-        cd build
-        cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF
-        make -j$(nproc)
+        mkdir -p build-ninja-release
+        cd build-ninja-release
+        cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+        cmake --build . --parallel "$(nproc)"
         cd ..
     fi
     
@@ -281,7 +287,7 @@ build_deb_package_fast() {
     cd "$PROJECT_ROOT"
     
     # Check if we have existing build
-    if [[ ! -d "build" ]] || [[ ! -f "build/src/pepctl" ]]; then
+    if [[ ! -d "build-ninja-release" ]] || [[ ! -f "build-ninja-release/src/pepctl" ]]; then
         log_error "No existing build found. Run './scripts/build.sh' first or use --build flag"
         return 1
     fi
@@ -294,15 +300,15 @@ build_deb_package_fast() {
     
     # Install main executable
     install -d debian/pepctl/usr/bin
-    install -m 755 build/src/pepctl debian/pepctl/usr/bin/
+    install -m 755 build-ninja-release/src/pepctl debian/pepctl/usr/bin/
     
     # Install shared libraries
     install -d debian/pepctl/usr/lib
-    find build/src -name "*.so" -exec install -m 644 {} debian/pepctl/usr/lib/ \;
+    find build-ninja-release/src -name "*.so" -exec install -m 644 {} debian/pepctl/usr/lib/ \;
     
     # Install eBPF programs
     install -d debian/pepctl/usr/share/pepctl/ebpf
-    install -m 644 build/ebpf/*.o debian/pepctl/usr/share/pepctl/ebpf/
+    install -m 644 build-ninja-release/ebpf/*.o debian/pepctl/usr/share/pepctl/ebpf/
     
     # Install configuration files
     install -d debian/pepctl/usr/share/pepctl

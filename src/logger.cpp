@@ -14,13 +14,9 @@
 namespace pepctl 
 {
 
-std::unique_ptr<Logger> gLogger;
-
 Logger::Logger() : m_config{}, m_currentLevel(LogLevel::INFO), m_stats{}
 {
-    /*
-        Initialize statistics
-    */
+    // Initialize statistics
     m_stats.totalMessages = 0;
     for(int i = 0; i < 7; ++i)
     {
@@ -34,6 +30,36 @@ Logger::~Logger()
     shutdown();
 }
 
+auto Logger::makeFallbackConfig(bool isSystemdService) -> LoggerConfig
+{
+    LoggerConfig fallback;
+    fallback.level = LogLevel::INFO;
+    fallback.consoleOutput = !isSystemdService;
+    fallback.fileOutput = false;
+    fallback.syslogOutput = false;
+    fallback.systemdOutput = isSystemdService;
+    fallback.structuredLogging = true;
+    fallback.logFormat = "json";
+    return fallback;
+}
+
+auto Logger::createWithFallback(const LoggerConfig& desiredConfig,
+                                bool isSystemdService) -> std::shared_ptr<Logger>
+{
+    auto logger = std::make_shared<Logger>();
+
+    if(logger->initialize(desiredConfig) == true)
+    {
+        return logger;
+    }
+
+    std::cerr << "Failed to initialize logger, using fallback logger" << '\n';
+
+    const auto fallback = makeFallbackConfig(isSystemdService);
+    [[maybe_unused]] bool ok = logger->initialize(fallback);
+    return logger;
+}
+
 auto Logger::initialize(const LoggerConfig& config) -> bool
 {
     try
@@ -41,9 +67,7 @@ auto Logger::initialize(const LoggerConfig& config) -> bool
         m_config = config;
         m_currentLevel = config.level;
 
-        /*
-            Setup spdlog loggers
-        */
+        // Setup spdlog loggers
         setupSinks();
 
         if(m_mainLogger != nullptr)
@@ -72,9 +96,7 @@ void Logger::shutdown()
 {
     try
     {
-        /*
-            Flush all pending log messages first
-        */
+        // Flush all pending log messages first
         if(m_mainLogger != nullptr)
         {
             m_mainLogger->flush();
@@ -84,35 +106,25 @@ void Logger::shutdown()
             m_structuredLogger->flush();
         }
 
-        /*
-            Reset our logger references first
-        */
+        // Reset our logger references first
         m_mainLogger.reset();
         m_structuredLogger.reset();
 
-        /*
-            Then drop all spdlog loggers
-            This should be safe now since we've released our references
-        */
+        // Then drop all spdlog loggers
+        // This should be safe now since we've released our references
         spdlog::drop_all();
 
-        /*
-            Shutdown spdlog's thread pool if using async logging
-        */
+        // Shutdown spdlog's thread pool if using async logging
         spdlog::shutdown();
     }
     catch(const std::exception& e)
     {
-        /*
-            If shutdown fails, don't hang - just continue
-        */
+        // If shutdown fails, don't hang - just continue
         std::cerr << "Logger shutdown error (non-fatal): " << e.what() << '\n';
     }
     catch(...)
     {
-        /*
-            Catch any other exceptions to prevent hanging
-        */
+        // Catch any other exceptions to prevent hanging
         std::cerr << "Logger shutdown unknown error (non-fatal)" << '\n';
     }
 }
@@ -303,9 +315,7 @@ void Logger::flush()
 
 void Logger::rotateLogs()
 {
-    /*
-        Force rotation by flushing and recreating file sinks
-    */
+    // Force rotation by flushing and recreating file sinks
     if(m_config.fileOutput && !m_config.logFilePath.empty())
     {
         flush();
@@ -324,9 +334,7 @@ void Logger::logWithContext(LogLevel level, const LogContext& ctx, const std::st
 
     auto spdLevel = toSpdlogLevel(level);
 
-    /*
-        Log to main logger
-    */
+    // Log to main logger
     if(m_mainLogger != nullptr)
     {
         std::string contextPrefix = "[" + categoryToString(ctx.category) + "]";
@@ -342,9 +350,7 @@ void Logger::logWithContext(LogLevel level, const LogContext& ctx, const std::st
         m_mainLogger->log(spdLevel, "{} {}", contextPrefix, message);
     }
 
-    /*
-        Log structured data if enabled
-    */
+    // Log structured data if enabled
     if(m_structuredLogger != nullptr && m_config.structuredLogging)
     {
         std::string structuredMsg;
@@ -443,9 +449,7 @@ auto Logger::formatJsonMessage(const LogContext& ctx, const std::string& message
         jsonTemp["fields"] = ctx.extraFields;
     }
 
-    /*
-        Convert to JSON std::string
-    */
+    // Convert to JSON std::string
     return jsonTemp.dump();
 }
 
@@ -454,37 +458,37 @@ auto Logger::categoryToString(LogCategory category) -> std::string
     switch(category)
     {
         case LogCategory::SYSTEM:
-            {
-                return "SYSTEM";
-            }
+        {
+            return "SYSTEM";
+        }
         case LogCategory::POLICY:
-            {
-                return "POLICY";
-            }
+        {
+            return "POLICY";
+        }
         case LogCategory::EBPF:
-            {
-                return "EBPF";
-            }
+        {
+            return "EBPF";
+        }
         case LogCategory::NETWORK:
-            {
-                return "NETWORK";
-            }
+        {
+            return "NETWORK";
+        }
         case LogCategory::METRICS:
-            {
-                return "METRICS";
-            }
+        {
+            return "METRICS";
+        }
         case LogCategory::SECURITY:
-            {
-                return "SECURITY";
-            }
+        {
+            return "SECURITY";
+        }
         case LogCategory::PERFORMANCE:
-            {
-                return "PERFORMANCE";
-            }
+        {
+            return "PERFORMANCE";
+        }
         default:
-            {
-                return "UNKNOWN";
-            }
+        {
+            return "UNKNOWN";
+        }
     }
 }
 
@@ -493,33 +497,33 @@ auto Logger::levelToString(LogLevel level) -> std::string
     switch(level)
     {
         case LogLevel::TRACE:
-            {
-                return "TRACE";
-            }
+        {
+            return "TRACE";
+        }
         case LogLevel::DBG:
-            {
-                return "DEBUG";
-            }
+        {
+            return "DEBUG";
+        }
         case LogLevel::INFO:
-            {
-                return "INFO";
-            }
+        {
+            return "INFO";
+        }
         case LogLevel::WARN:
-            {
-                return "WARN";
-            }
+        {
+            return "WARN";
+        }
         case LogLevel::ERROR:
-            {
-                return "ERROR";
-            }
+        {
+            return "ERROR";
+        }
         case LogLevel::CRITICAL:
-            {
-                return "CRITICAL";
-            }
+        {
+            return "CRITICAL";
+        }
         default:
-            {
-                return "UNKNOWN";
-            }
+        {
+            return "UNKNOWN";
+        }
     }
 }
 
@@ -528,33 +532,33 @@ auto Logger::toSpdlogLevel(LogLevel level) -> spdlog::level::level_enum
     switch(level)
     {
         case LogLevel::TRACE:
-            {
-                return spdlog::level::trace;
-            }
+        {
+            return spdlog::level::trace;
+        }
         case LogLevel::DBG:
-            {
-                return spdlog::level::debug;
-            }
+        {
+            return spdlog::level::debug;
+        }
         case LogLevel::INFO:
-            {
-                return spdlog::level::info;
-            }
+        {
+            return spdlog::level::info;
+        }
         case LogLevel::WARN:
-            {
-                return spdlog::level::warn;
-            }
+        {
+            return spdlog::level::warn;
+        }
         case LogLevel::ERROR:
-            {
-                return spdlog::level::err;
-            }
+        {
+            return spdlog::level::err;
+        }
         case LogLevel::CRITICAL:
-            {
-                return spdlog::level::critical;
-            }
+        {
+            return spdlog::level::critical;
+        }
         default:
-            {
-                return spdlog::level::off;
-            }
+        {
+            return spdlog::level::off;
+        }
     }
 }
 
@@ -572,9 +576,7 @@ void Logger::setupSinks()
     std::vector<spdlog::sink_ptr> sinks;
     std::vector<spdlog::sink_ptr> structuredSinks;
 
-    /*
-        Console output
-    */
+    // Console output
     if(m_config.consoleOutput == true)
     {
         setupConsoleSink();
@@ -582,9 +584,7 @@ void Logger::setupSinks()
         sinks.push_back(consoleSink);
     }
 
-    /*
-        File output
-    */
+    // File output
     if(m_config.fileOutput == true && m_config.logFilePath.empty() == false)
     {
         setupFileSink();
@@ -594,9 +594,7 @@ void Logger::setupSinks()
         structuredSinks.push_back(fileSink);
     }
 
-    /*
-        Syslog output
-    */
+    // Syslog output
     if(m_config.syslogOutput == true)
     {
         setupSyslogSink();
@@ -605,9 +603,7 @@ void Logger::setupSinks()
         sinks.push_back(syslogSink);
     }
 
-    /*
-        Systemd Journal output (default on Linux)
-    */
+    // Systemd Journal output (default on Linux)
     if(m_config.systemdOutput == true)
     {
         setupSystemdSink();
@@ -616,18 +612,14 @@ void Logger::setupSinks()
         structuredSinks.push_back(systemdSink);
     }
 
-    /*
-        Create main logger
-    */
+    // Create main logger
     if(sinks.empty() == false)
     {
         m_mainLogger = std::make_shared<spdlog::logger>("pepctl", sinks.begin(), sinks.end());
         spdlog::register_logger(m_mainLogger);
     }
 
-    /*
-        Create structured logger for JSON output
-    */
+    // Create structured logger for JSON output
     if(structuredSinks.empty() == false && m_config.structuredLogging == true)
     {
         m_structuredLogger = std::make_shared<spdlog::logger>(

@@ -32,10 +32,10 @@ exit 1
 fi
 
 # Check if pepctl binary exists
-PEPCTL_BINARY="$PROJECT_ROOT/build/src/pepctl"
+PEPCTL_BINARY="$PROJECT_ROOT/build-ninja/src/pepctl"
 if [[ ! -f "$PEPCTL_BINARY" ]]; then
 echo " PEPCTL binary not found: $PEPCTL_BINARY"
-echo "Please build the project first: make -C build"
+echo "Please build the project first: cmake --preset clang-ninja-debug && cmake --build --preset build-debug"
 exit 1
 fi
 

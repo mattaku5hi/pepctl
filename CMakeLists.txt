@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.20)
 project(pepctl VERSION 1.0.0 LANGUAGES CXX C)
 
+if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    message(FATAL_ERROR "pepctl requires Clang for C compiler (set -DCMAKE_C_COMPILER=clang)")
+endif()
+
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    message(FATAL_ERROR "pepctl requires Clang for C++ compiler (set -DCMAKE_CXX_COMPILER=clang++)")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -45,7 +53,7 @@ if(NOT nlohmann_json_FOUND)
 endif()
 
 # Include directories
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 include_directories(${LIBBPF_INCLUDE_DIRS})
 
 # Compiler-specific options
